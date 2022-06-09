@@ -4,7 +4,7 @@
 	"version": "1.0.1",
 	"minAppVersion": "0.12.0",
 	"description": "A task progress bar plugin for tasks in Obsidian.",
-	"author": "Quorafind",
+	"author": "Boninall",
 	"authorUrl": "https://github.com/Quorafind",
 	"isDesktopOnly": false
 }
