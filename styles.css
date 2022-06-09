@@ -1,4 +1,6 @@
-/* Sets all the text color to red! */
-body {
-    color: red;
+/* Set Default Progress Bar For Plugin */
+.progress-bar-inline {
+	width: 85px !important;
+	margin-bottom: 5px !important;
+	margin-left: 4px;
 }
