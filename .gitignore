@@ -1,9 +1,13 @@
 # vscode
-.vscode 
+.vscode
 
 # Intellij
 *.iml
 .idea
+
+# Zip
+*.zip
+*.rar
 
 # npm
 node_modules

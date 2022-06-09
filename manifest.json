@@ -1,10 +1,10 @@
 {
-	"id": "obsidian-sample-plugin",
-	"name": "Sample Plugin",
+	"id": "obsidian-task-progress-bar",
+	"name": "Task Progress Bar",
 	"version": "1.0.1",
 	"minAppVersion": "0.12.0",
-	"description": "This is a sample plugin for Obsidian. This plugin demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
+	"description": "A task progress bar plugin for tasks in Obsidian.",
+	"author": "Quorafind",
+	"authorUrl": "https://github.com/Quorafind",
 	"isDesktopOnly": false
 }
