@@ -52,11 +52,11 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: '📍 Task Progress Bar'});
+		containerEl.createEl('h2', { text: '📍 Task Progress Bar' });
 
 		new Setting(containerEl)
 			.setName('Add progress bar to Heading')
