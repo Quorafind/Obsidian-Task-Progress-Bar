@@ -15,7 +15,7 @@ esbuild.build({
 	banner: {
 		js: banner,
 	},
-	entryPoints: ['taskProgressBarIndex.ts'],
+	entryPoints: ['src/taskProgressBarIndex.ts'],
 	bundle: true,
 	external: [
 		'obsidian',

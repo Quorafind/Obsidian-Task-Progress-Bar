@@ -63,7 +63,6 @@ class TaskProgressBarWidget extends WidgetType {
     progressEl.setAttribute('max', this.total.toString());
     progressEl.setAttribute('value', this.completed.toString());
     progressEl.setAttribute('class', 'progress-bar-inline');
-	  progressEl.setAttribute('color', 'blue');
     creaseEl.appendChild(progressEl);
 
     return creaseEl;
