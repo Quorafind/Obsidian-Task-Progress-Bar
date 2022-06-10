@@ -1,6 +1,8 @@
 # Obsidian Task Progress Bar
 
-A plugin for showing task progress bar near the tasks bullet.
+A plugin for showing task progress bar near the tasks bullet or headings. Only works in Live Preview mode in Obsidian.
+
+![example](./media/example.gif)
 
 ## Settings
 

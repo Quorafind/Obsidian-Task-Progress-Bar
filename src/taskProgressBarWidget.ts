@@ -59,11 +59,37 @@ class TaskProgressBarWidget extends WidgetType {
 
   toDOM() {
     const creaseEl = createSpan('cm-task-progress-bar');
-    const progressEl = document.createElement('progress');
-    progressEl.setAttribute('max', this.total.toString());
-    progressEl.setAttribute('value', this.completed.toString());
-    progressEl.setAttribute('class', 'progress-bar-inline');
-    creaseEl.appendChild(progressEl);
+    // const progressEl = document.createElement('progress');
+    // progressEl.setAttribute('max', this.total.toString());
+    // progressEl.setAttribute('value', this.completed.toString());
+    // progressEl.setAttribute('class', 'progress-bar-inline');
+    const progressBackGroundEl = document.createElement('div');
+	const progressEl = document.createElement('div');
+	const percentage = Math.round(this.completed / this.total * 10000) / 100;
+	progressEl.style.width = percentage + '%';
+	progressEl.style.height = '8px';
+	switch (true) {
+		case percentage >= 0 && percentage < 25:
+			progressEl.style.backgroundColor = '#AE431E'
+			break;
+		case percentage >= 25 && percentage < 50:
+			progressEl.style.backgroundColor = '#E5890A'
+			break;
+		case percentage >= 50 && percentage < 75:
+			progressEl.style.backgroundColor = '#B4C6A6'
+			break;
+		case percentage >= 75 && percentage < 100:
+			progressEl.style.backgroundColor = '#6BCB77'
+			break;
+		case percentage >= 100:
+			progressEl.style.backgroundColor = '#4D96FF'
+			break;
+	}
+	progressBackGroundEl.setAttribute('class', 'progress-bar-inline-background');
+	progressEl.setAttribute('class', 'progress-bar-inline');
+
+    creaseEl.appendChild(progressBackGroundEl);
+	progressBackGroundEl.appendChild(progressEl);
 
     return creaseEl;
   }

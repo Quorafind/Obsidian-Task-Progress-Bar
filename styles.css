@@ -1,6 +1,29 @@
 /* Set Default Progress Bar For Plugin */
+.cm-task-progress-bar {
+	display: inline-block;
+	position: relative;
+	margin-left: 5px;
+	margin-bottom: 1px;
+}
+
+.HyperMD-header .cm-task-progress-bar {
+	display: inline-block;
+	position: relative;
+	margin-left: 5px;
+	margin-bottom: 5px;
+}
+
 .progress-bar-inline {
-	width: 85px !important;
-	margin-bottom: 5px !important;
-	margin-left: 4px;
+	border-radius: 10px;
+
+}
+
+.progress-bar-inline-background {
+	color: #000 !important;
+	background-color: #f1f1f1 !important;
+	border-radius: 10px;
+	flex-direction: row;
+	justify-content: flex-start;
+	align-items: center;
+	width: 85px;
 }
