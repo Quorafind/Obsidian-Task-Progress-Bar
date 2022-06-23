@@ -3,18 +3,16 @@ import {
 	DecorationSet,
 	EditorView,
 	MatchDecorator,
-	PluginField,
 	ViewPlugin,
 	ViewUpdate,
 	WidgetType,
 } from '@codemirror/view';
 import { SearchCursor } from "@codemirror/search";
-import { App, editorLivePreviewField, MarkdownView, Menu, Setting } from 'obsidian';
+import { App, editorLivePreviewField, MarkdownView, Menu, Plugin, Setting } from 'obsidian';
 import { EditorState } from "@codemirror/state";
-import { foldable, syntaxTree } from "@codemirror/language";
+import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { RegExpCursor } from "./regexp-cursor";
-import { tokenClassNodeProp } from "@codemirror/stream-parser";
-import { addTaskProgressBarToHeading } from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from "./taskProgressBarIndex";
 
 interface tasks {
 	completed: number;
@@ -58,11 +56,7 @@ class TaskProgressBarWidget extends WidgetType {
 	}
 
 	toDOM() {
-		const creaseEl = createSpan('cm-task-progress-bar');
-		// const progressEl = document.createElement('progress');
-		// progressEl.setAttribute('max', this.total.toString());
-		// progressEl.setAttribute('value', this.completed.toString());
-		// progressEl.setAttribute('class', 'progress-bar-inline');
+		const progressBarEl = createSpan('cm-task-progress-bar');
 		const progressBackGroundEl = document.createElement('div');
 		const progressEl = document.createElement('div');
 		const percentage = Math.round(this.completed / this.total * 10000) / 100;
@@ -88,10 +82,10 @@ class TaskProgressBarWidget extends WidgetType {
 		progressBackGroundEl.setAttribute('class', 'progress-bar-inline-background');
 		progressEl.setAttribute('class', 'progress-bar-inline');
 
-		creaseEl.appendChild(progressBackGroundEl);
+		progressBarEl.appendChild(progressBackGroundEl);
 		progressBackGroundEl.appendChild(progressEl);
 
-		return creaseEl;
+		return progressBarEl;
 	}
 
 	ignoreEvent() {
@@ -99,7 +93,8 @@ class TaskProgressBarWidget extends WidgetType {
 	}
 }
 
-export function taskProgressBarPlugin(app: App) {
+export function taskProgressBarPlugin(app: App, plugin: TaskProgressBarPlugin) {
+	console.log(plugin);
 	return ViewPlugin.fromClass(
 		class {
 			progressDecorations: DecorationSet = Decoration.none;
@@ -132,7 +127,7 @@ export function taskProgressBarPlugin(app: App) {
 						console.debug(err);
 						continue;
 					}
-					if (addTaskProgressBarToHeading) {
+					if (plugin?.settings.addTaskProgressBarToHeading) {
 						try {
 							headingCursor = new RegExpCursor(state.doc, "^(#){1,6} ", {}, part.from, part.to);
 						} catch (err) {
@@ -153,10 +148,10 @@ export function taskProgressBarPlugin(app: App) {
 									// @ts-ignore
 									allChildrenText = allChildrenText.concat(this.view.state.doc.slice(range.from, range.to).children[i].text);
 								}
-								tasksNum = this.caculateTasksNum(allChildrenText);
+								tasksNum = this.calculateTasksNum(allChildrenText);
 							} else {
 								// @ts-ignore
-								tasksNum = this.caculateTasksNum(this.view.state.doc.slice(range.from, range.to).text);
+								tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text);
 							}
 							if (tasksNum?.total === 0) continue;
 							let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, view, headingLine.to, headingLine.to, tasksNum.completed, tasksNum.total) });
@@ -178,7 +173,7 @@ export function taskProgressBarPlugin(app: App) {
 						const range = this.calculateRangeForTransform(this.view.state, line.to);
 						if (!range) continue;
 						// @ts-ignore
-						const tasksNum = this.caculateTasksNum(this.view.state.doc.slice(range.from, range.to).text);
+						const tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text);
 						if (tasksNum.total === 0) continue;
 						let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, view, line.to, line.to, tasksNum.completed, tasksNum.total) });
 						progressDecos.push(startDeco.range(line.to, line.to));
@@ -205,24 +200,29 @@ export function taskProgressBarPlugin(app: App) {
 				return { from: line.from, to: foldRange.to };
 			}
 
-			public caculateTasksNum(textArray: string[]): tasks {
+			public calculateTasksNum(textArray: string[]): tasks {
 				let completed: number = 0;
 				let total: number = 0;
 				if (!textArray) return;
 				for (let i = 0; i < textArray.length; i++) {
 					if (i === 0) continue;
 					if (textArray[i].match(/[\t|\s]+-\s\[(.)\]/)) total++;
-					if (textArray[i].match(/[\t|\s]+-\s\[x\]/)) completed++;
-					if (addTaskProgressBarToHeading) {
+					if (textArray[i].match(/[\t|\s]+-\s\[(x|X)\]/)) completed++;
+					if (plugin?.settings.addTaskProgressBarToHeading) {
 						if (textArray[i].match(/-\s\[(.)\]/)) total++;
-						if (textArray[i].match(/-\s\[x\]/)) completed++;
+						if (textArray[i].match(/-\s\[(x|X)\]/)) completed++;
 					}
 				}
 				return { completed: completed, total: total };
 			};
 		},
 		{
-			provide: PluginField.decorations.from((val) => val.progressDecorations),
-		},
+			provide: plugin => [
+				// these are separated out so that we can set decoration priority
+				// it's also much easier to sort the decorations when they're grouped
+				EditorView.decorations.of(v => v.plugin(plugin)?.progressDecorations || Decoration.none),
+			],
+		}
+		// provide: PluginField.decorations.from((val) => val.progressDecorations),
 	);
 }

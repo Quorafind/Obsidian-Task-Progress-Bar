@@ -16,9 +16,8 @@ export default class TaskProgressBarPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.addSettingTab(new TaskProgressBarSettingTab(this.app, this));
-		this.registerEditorExtension(taskProgressBarPlugin(this.app));
+		this.registerEditorExtension(taskProgressBarPlugin(this.app, this));
 
-		addTaskProgressBarToHeading = this.settings.addTaskProgressBarToHeading;
 	}
 
 	onunload() {
@@ -77,5 +76,3 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 			});
 	}
 }
-
-export let addTaskProgressBarToHeading: boolean;
