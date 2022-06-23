@@ -27,3 +27,26 @@
 	align-items: center;
 	width: 85px;
 }
+
+/* Set Default Progress Bar With Number For Plugin */
+
+.cm-task-progress-bar.with-number {
+	display: inline-flex;
+	flex-direction: row-reverse;
+	align-items: center;
+}
+
+.HyperMD-header .cm-task-progress-bar.with-number .progress-bar-inline-background, .HyperMD-header .cm-task-progress-bar.with-number .progress-status {
+	margin-bottom: 5px;
+}
+
+
+.cm-task-progress-bar.with-number .progress-bar-inline-background {
+	margin-bottom: -2px;
+	width: 42px;
+}
+
+.cm-task-progress-bar.with-number .progress-status {
+	font-size: 13px;
+	margin-left: 3px;
+}

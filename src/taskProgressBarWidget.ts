@@ -26,6 +26,7 @@ interface Text {
 class TaskProgressBarWidget extends WidgetType {
 	constructor(
 		readonly app: App,
+		readonly plugin: TaskProgressBarPlugin,
 		readonly view: EditorView,
 		readonly from: number,
 		readonly to: number,
@@ -56,9 +57,10 @@ class TaskProgressBarWidget extends WidgetType {
 	}
 
 	toDOM() {
-		const progressBarEl = createSpan('cm-task-progress-bar');
+		const progressBarEl = createSpan(this.plugin?.settings.addNumberToProgressBar ? 'cm-task-progress-bar with-number' : 'cm-task-progress-bar');
 		const progressBackGroundEl = document.createElement('div');
 		const progressEl = document.createElement('div');
+
 		const percentage = Math.round(this.completed / this.total * 10000) / 100;
 		progressEl.style.width = percentage + '%';
 		progressEl.style.height = '8px';
@@ -82,6 +84,13 @@ class TaskProgressBarWidget extends WidgetType {
 		progressBackGroundEl.setAttribute('class', 'progress-bar-inline-background');
 		progressEl.setAttribute('class', 'progress-bar-inline');
 
+		if (this.plugin?.settings.addNumberToProgressBar) {
+			const numberEl = document.createElement('div');
+			numberEl.setAttribute('class', 'progress-status');
+			numberEl.appendChild(document.createTextNode('[' + this.completed + '/' + this.total + ']'));
+			progressBarEl.appendChild(numberEl);
+		}
+
 		progressBarEl.appendChild(progressBackGroundEl);
 		progressBackGroundEl.appendChild(progressEl);
 
@@ -94,7 +103,6 @@ class TaskProgressBarWidget extends WidgetType {
 }
 
 export function taskProgressBarPlugin(app: App, plugin: TaskProgressBarPlugin) {
-	console.log(plugin);
 	return ViewPlugin.fromClass(
 		class {
 			progressDecorations: DecorationSet = Decoration.none;
@@ -154,7 +162,7 @@ export function taskProgressBarPlugin(app: App, plugin: TaskProgressBarPlugin) {
 								tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text);
 							}
 							if (tasksNum?.total === 0) continue;
-							let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, view, headingLine.to, headingLine.to, tasksNum.completed, tasksNum.total) });
+							let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, plugin, view, headingLine.to, headingLine.to, tasksNum.completed, tasksNum.total) });
 							progressDecos.push(startDeco.range(headingLine.to, headingLine.to));
 						}
 					}
@@ -175,7 +183,7 @@ export function taskProgressBarPlugin(app: App, plugin: TaskProgressBarPlugin) {
 						// @ts-ignore
 						const tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text);
 						if (tasksNum.total === 0) continue;
-						let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, view, line.to, line.to, tasksNum.completed, tasksNum.total) });
+						let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, plugin, view, line.to, line.to, tasksNum.completed, tasksNum.total) });
 						progressDecos.push(startDeco.range(line.to, line.to));
 					}
 				}
@@ -223,6 +231,5 @@ export function taskProgressBarPlugin(app: App, plugin: TaskProgressBarPlugin) {
 				EditorView.decorations.of(v => v.plugin(plugin)?.progressDecorations || Decoration.none),
 			],
 		}
-		// provide: PluginField.decorations.from((val) => val.progressDecorations),
 	);
 }
