@@ -3,10 +3,12 @@ import { taskProgressBarPlugin } from './taskProgressBarWidget';
 
 interface TaskProgressBarSettings {
 	addTaskProgressBarToHeading: boolean;
+	addNumberToProgressBar: boolean;
 }
 
 const DEFAULT_SETTINGS: TaskProgressBarSettings = {
-	addTaskProgressBarToHeading: false
+	addTaskProgressBarToHeading: false,
+	addNumberToProgressBar: false
 }
 
 export default class TaskProgressBarPlugin extends Plugin {
@@ -63,6 +65,15 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.addTaskProgressBarToHeading).onChange(async (value) => {
 					this.plugin.settings.addTaskProgressBarToHeading = value;
+					this.applySettingsUpdate();
+				}));
+
+		new Setting(containerEl)
+			.setName('Add number to the Progress Bar')
+			.setDesc('Toggle this to allow this plugin to add tasks number to progress bar.')
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.addNumberToProgressBar).onChange(async (value) => {
+					this.plugin.settings.addNumberToProgressBar = value;
 					this.applySettingsUpdate();
 				}));
 
