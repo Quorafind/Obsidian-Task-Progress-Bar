@@ -84,7 +84,7 @@ class TaskProgressBarWidget extends WidgetType {
 		progressBackGroundEl.setAttribute('class', 'progress-bar-inline-background');
 		progressEl.setAttribute('class', 'progress-bar-inline');
 
-		if (this.plugin?.settings.addNumberToProgressBar) {
+		if (this.plugin?.settings.addNumberToProgressBar && this.total && this.completed) {
 			const numberEl = document.createElement('div');
 			numberEl.setAttribute('class', 'progress-status');
 			numberEl.appendChild(document.createTextNode('[' + this.completed + '/' + this.total + ']'));
