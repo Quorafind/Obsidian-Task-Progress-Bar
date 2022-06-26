@@ -102,7 +102,7 @@ class TaskProgressBarWidget extends WidgetType {
 	}
 }
 
-export function taskProgressBarPlugin(app: App, plugin: TaskProgressBarPlugin) {
+export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin) {
 	return ViewPlugin.fromClass(
 		class {
 			progressDecorations: DecorationSet = Decoration.none;
@@ -215,10 +215,10 @@ export function taskProgressBarPlugin(app: App, plugin: TaskProgressBarPlugin) {
 				for (let i = 0; i < textArray.length; i++) {
 					if (i === 0) continue;
 					if (textArray[i].match(/[\t|\s]+-\s\[(.)\]/)) total++;
-					if (textArray[i].match(/[\t|\s]+-\s\[(x|X)\]/)) completed++;
+					if (textArray[i].match(/[\t|\s]+-\s\[[^ ]\]/)) completed++;
 					if (plugin?.settings.addTaskProgressBarToHeading) {
 						if (textArray[i].match(/-\s\[(.)\]/)) total++;
-						if (textArray[i].match(/-\s\[(x|X)\]/)) completed++;
+						if (textArray[i].match(/-\s\[[^ ]\]/)) completed++;
 					}
 				}
 				return { completed: completed, total: total };
