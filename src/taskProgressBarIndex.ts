@@ -1,5 +1,5 @@
 import { App, Editor, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { taskProgressBarPlugin } from './taskProgressBarWidget';
+import { taskProgressBarExtension } from './taskProgressBarWidget';
 
 interface TaskProgressBarSettings {
 	addTaskProgressBarToHeading: boolean;
@@ -18,7 +18,7 @@ export default class TaskProgressBarPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.addSettingTab(new TaskProgressBarSettingTab(this.app, this));
-		this.registerEditorExtension(taskProgressBarPlugin(this.app, this));
+		this.registerEditorExtension(taskProgressBarExtension(this.app, this));
 
 	}
 
