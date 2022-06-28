@@ -4,11 +4,15 @@ import { taskProgressBarExtension } from './taskProgressBarWidget';
 interface TaskProgressBarSettings {
 	addTaskProgressBarToHeading: boolean;
 	addNumberToProgressBar: boolean;
+	allowAlternateTaskStatus: boolean;
+	alternativeMarks: string;
 }
 
 const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	addTaskProgressBarToHeading: false,
-	addNumberToProgressBar: false
+	addNumberToProgressBar: false,
+	allowAlternateTaskStatus: false,
+	alternativeMarks: '(x|X|-)'
 }
 
 export default class TaskProgressBarPlugin extends Plugin {
@@ -76,6 +80,33 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 					this.plugin.settings.addNumberToProgressBar = value;
 					this.applySettingsUpdate();
 				}));
+
+		new Setting(containerEl)
+			.setName('Allow alternate task status')
+			.setDesc('Toggle this to allow this plugin to treat different tasks mark as completed or uncompleted tasks.')
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.allowAlternateTaskStatus).onChange(async (value) => {
+					this.plugin.settings.allowAlternateTaskStatus = value;
+					this.applySettingsUpdate();
+				}));
+
+		new Setting(containerEl)
+			.setName('Completed alternative marks')
+			.setDesc('Set completed alternative marks here. Like "x|X|-"')
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.alternativeMarks)
+					.setValue(this.plugin.settings.alternativeMarks)
+					.onChange(async (value) => {
+						if (value.length === 0) {
+							this.plugin.settings.alternativeMarks = DEFAULT_SETTINGS.alternativeMarks;
+						} else {
+							this.plugin.settings.alternativeMarks = value;
+						}
+						this.applySettingsUpdate();
+					}),
+			);
+
 
 		this.containerEl.createEl('h2', { text: 'Say Thank You' });
 

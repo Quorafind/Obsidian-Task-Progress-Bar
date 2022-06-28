@@ -156,10 +156,10 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 									// @ts-ignore
 									allChildrenText = allChildrenText.concat(this.view.state.doc.slice(range.from, range.to).children[i].text);
 								}
-								tasksNum = this.calculateTasksNum(allChildrenText);
+								tasksNum = this.calculateTasksNum(allChildrenText, false);
 							} else {
 								// @ts-ignore
-								tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text);
+								tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, false);
 							}
 							if (tasksNum?.total === 0) continue;
 							let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, plugin, view, headingLine.to, headingLine.to, tasksNum.completed, tasksNum.total) });
@@ -181,7 +181,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 						const range = this.calculateRangeForTransform(this.view.state, line.to);
 						if (!range) continue;
 						// @ts-ignore
-						const tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text);
+						const tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, true);
 						if (tasksNum.total === 0) continue;
 						let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, plugin, view, line.to, line.to, tasksNum.completed, tasksNum.total) });
 						progressDecos.push(startDeco.range(line.to, line.to));
@@ -208,17 +208,21 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				return { from: line.from, to: foldRange.to };
 			}
 
-			public calculateTasksNum(textArray: string[]): tasks {
+			public calculateTasksNum(textArray: string[], bullet: boolean): tasks {
 				let completed: number = 0;
 				let total: number = 0;
 				if (!textArray) return;
+				let completeRegex: RegExp = new RegExp("\\s+-\\s\\[[^ ]\\]");
+				if (plugin?.settings.alternativeMarks.length > 0 && plugin?.settings.allowAlternateTaskStatus) {
+					completeRegex = new RegExp("\\s+-\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
+				}
 				for (let i = 0; i < textArray.length; i++) {
 					if (i === 0) continue;
 					if (textArray[i].match(/[\t|\s]+-\s\[(.)\]/)) total++;
-					if (textArray[i].match(/[\t|\s]+-\s\[[^ ]\]/)) completed++;
-					if (plugin?.settings.addTaskProgressBarToHeading) {
+					if (textArray[i].match(completeRegex)) completed++;
+					if (plugin?.settings.addTaskProgressBarToHeading && !bullet) {
 						if (textArray[i].match(/-\s\[(.)\]/)) total++;
-						if (textArray[i].match(/-\s\[[^ ]\]/)) completed++;
+						if (textArray[i].match(completeRegex)) completed++;
 					}
 				}
 				return { completed: completed, total: total };
