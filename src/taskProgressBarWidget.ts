@@ -10,6 +10,7 @@ import {
 import { SearchCursor } from "@codemirror/search";
 import { App, editorLivePreviewField, MarkdownView, Menu, Plugin, Setting } from 'obsidian';
 import { EditorState } from "@codemirror/state";
+// @ts-ignore
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { RegExpCursor } from "./regexp-cursor";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
@@ -84,7 +85,7 @@ class TaskProgressBarWidget extends WidgetType {
 		progressBackGroundEl.setAttribute('class', 'progress-bar-inline-background');
 		progressEl.setAttribute('class', 'progress-bar-inline');
 
-		if (this.plugin?.settings.addNumberToProgressBar && this.total && this.completed) {
+		if (this.plugin?.settings.addNumberToProgressBar && this.total) {
 			const numberEl = document.createElement('div');
 			numberEl.setAttribute('class', 'progress-status');
 			numberEl.appendChild(document.createTextNode('[' + this.completed + '/' + this.total + ']'));
@@ -181,6 +182,8 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 						const range = this.calculateRangeForTransform(this.view.state, line.to);
 						if (!range) continue;
 						// @ts-ignore
+						if ((this.view.state.doc.slice(range.from, range.to).text.length === 1)) continue;
+						// @ts-ignore
 						const tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, true);
 						if (tasksNum.total === 0) continue;
 						let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, plugin, view, line.to, line.to, tasksNum.completed, tasksNum.total) });
@@ -197,9 +200,9 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				const line = state.doc.lineAt(pos);
 				const foldRange = foldable(state, line.from, line.to);
 
-				if (!foldRange && /^\s*([-*+]|\d+\.)\s+/.test(line.text)) {
-					return { from: line.from, to: line.to };
-				}
+				// if (!foldRange && /^\s*([-*+]|\d+\.)\s+/.test(line.text)) {
+				// 	return { from: line.from, to: line.to };
+				// }
 
 				if (!foldRange) {
 					return null;
@@ -211,18 +214,39 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 			public calculateTasksNum(textArray: string[], bullet: boolean): tasks {
 				let completed: number = 0;
 				let total: number = 0;
+				let level: number = null;
 				if (!textArray) return;
-				let completeRegex: RegExp = new RegExp("\\s+-\\s\\[[^ ]\\]");
+				let bulletCompleteRegex: RegExp = new RegExp("\\s+([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
+				let bulletTotalRegex: RegExp = new RegExp("[\\t|\\s]+([-*+]|\\d+\\.)\\s\\[(.)\\]");
+				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
+				let headingTotalRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[(.)\\]");
+				if (!plugin?.settings.countSubLevel && bullet) {
+					level = textArray[0].match(/^\s*/)[0].length;
+					// Total regex based on indent level
+					bulletTotalRegex = new RegExp("^[\\t|\\s]{" + (level + 1) + "}([-*+]|\\d+\\.)\\s\\[(.)\\]");
+				}
+				if (!plugin?.settings.countSubLevel && !bullet) {
+					level = 0;
+					headingTotalRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[(.)\\]");
+				}
 				if (plugin?.settings.alternativeMarks.length > 0 && plugin?.settings.allowAlternateTaskStatus) {
-					completeRegex = new RegExp("\\s+-\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
+					bulletCompleteRegex = level !== null ? new RegExp("^\\s{" + (level + 1) + "}([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("\\s+([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
+					if (plugin?.settings.addTaskProgressBarToHeading) {
+						headingCompleteRegex = level !== null ? new RegExp("^([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]");
+					}
 				}
 				for (let i = 0; i < textArray.length; i++) {
-					if (i === 0) continue;
-					if (textArray[i].match(/[\t|\s]+-\s\[(.)\]/)) total++;
-					if (textArray[i].match(completeRegex)) completed++;
+					if (i === 0) {
+						continue;
+					}
+					if (bullet) {
+						if (textArray[i].match(bulletTotalRegex)) total++;
+						if (textArray[i].match(bulletCompleteRegex)) completed++;
+						continue;
+					}
 					if (plugin?.settings.addTaskProgressBarToHeading && !bullet) {
-						if (textArray[i].match(/-\s\[(.)\]/)) total++;
-						if (textArray[i].match(completeRegex)) completed++;
+						if (textArray[i].match(headingTotalRegex)) total++;
+						if (textArray[i].match(headingCompleteRegex)) completed++;
 					}
 				}
 				return { completed: completed, total: total };
