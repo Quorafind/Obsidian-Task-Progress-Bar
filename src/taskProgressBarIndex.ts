@@ -6,13 +6,15 @@ interface TaskProgressBarSettings {
 	addNumberToProgressBar: boolean;
 	allowAlternateTaskStatus: boolean;
 	alternativeMarks: string;
+	countSubLevel: boolean;
 }
 
 const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	addTaskProgressBarToHeading: false,
 	addNumberToProgressBar: false,
 	allowAlternateTaskStatus: false,
-	alternativeMarks: '(x|X|-)'
+	alternativeMarks: '(x|X|-)',
+	countSubLevel: true,
 }
 
 export default class TaskProgressBarPlugin extends Plugin {
@@ -78,6 +80,15 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.addNumberToProgressBar).onChange(async (value) => {
 					this.plugin.settings.addNumberToProgressBar = value;
+					this.applySettingsUpdate();
+				}));
+
+		new Setting(containerEl)
+			.setName('Only count children of current Task')
+			.setDesc('Toggle this to allow this plugin to count the tasks in one level, but not in sub-levels.')
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.countSubLevel).onChange(async (value) => {
+					this.plugin.settings.countSubLevel = value;
 					this.applySettingsUpdate();
 				}));
 
