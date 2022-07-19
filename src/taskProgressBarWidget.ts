@@ -216,21 +216,22 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				let total: number = 0;
 				let level: number = null;
 				if (!textArray) return;
+				const tabSize = app.vault.getConfig("tabSize");
 				let bulletCompleteRegex: RegExp = new RegExp("\\s+([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
 				let bulletTotalRegex: RegExp = new RegExp("[\\t|\\s]+([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
 				let headingTotalRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[(.)\\]");
-				if (!plugin?.settings.countSubLevel && bullet) {
-					level = textArray[0].match(/^\s*/)[0].length;
+				if (plugin?.settings.countSubLevel && bullet) {
+					level = textArray[0].match(/^\s*/)[0].length / tabSize;
 					// Total regex based on indent level
-					bulletTotalRegex = new RegExp("^[\\t|\\s]{" + (level + 1) + "}([-*+]|\\d+\\.)\\s\\[(.)\\]");
+					bulletTotalRegex = new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				}
-				if (!plugin?.settings.countSubLevel && !bullet) {
+				if (plugin?.settings.countSubLevel && !bullet) {
 					level = 0;
 					headingTotalRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				}
 				if (plugin?.settings.alternativeMarks.length > 0 && plugin?.settings.allowAlternateTaskStatus) {
-					bulletCompleteRegex = level !== null ? new RegExp("^\\s{" + (level + 1) + "}([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("\\s+([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
+					bulletCompleteRegex = level !== null ? new RegExp("^\\s{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("\\s+([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
 					if (plugin?.settings.addTaskProgressBarToHeading) {
 						headingCompleteRegex = level !== null ? new RegExp("^([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]");
 					}
