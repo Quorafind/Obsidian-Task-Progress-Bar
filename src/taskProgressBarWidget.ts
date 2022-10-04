@@ -2,13 +2,12 @@ import {
 	Decoration,
 	DecorationSet,
 	EditorView,
-	MatchDecorator,
 	ViewPlugin,
 	ViewUpdate,
 	WidgetType,
 } from '@codemirror/view';
 import { SearchCursor } from "@codemirror/search";
-import { App, editorLivePreviewField, MarkdownView, Menu, Plugin, Setting } from 'obsidian';
+import { App, MarkdownView } from 'obsidian';
 import { EditorState } from "@codemirror/state";
 // @ts-ignore
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
@@ -45,7 +44,7 @@ class TaskProgressBarWidget extends WidgetType {
 	eq(other: TaskProgressBarWidget) {
 		const markdownView = app.workspace.getActiveViewOfType(MarkdownView);
 		if (!markdownView) {
-			return;
+			return false;
 		}
 		if (this.completed === other.completed && this.total === other.total) {
 			return true;
@@ -167,6 +166,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 						while (!headingCursor.next().done) {
 							let { from, to } = headingCursor.value;
 							const headingLine = this.view.state.doc.lineAt(from);
+							// @ts-ignore
 							const range = this.calculateRangeForTransform(this.view.state, headingLine.from);
 
 							if (!range) continue;
@@ -192,7 +192,9 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 					while (!taskBulletCursor.next().done) {
 						let { from } = taskBulletCursor.value;
 						const linePos = view.state.doc.lineAt(from)?.from;
+						// @ts-ignore
 						let syntaxNode = syntaxTree(view.state).resolveInner(linePos + 1),
+							// @ts-ignore
 							nodeProps: string = syntaxNode.type.prop(tokenClassNodeProp),
 							excludedSection = ["hmd-codeblock", "hmd-frontmatter"].find(token =>
 								nodeProps?.split(" ").includes(token)
@@ -201,6 +203,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 						const line = this.view.state.doc.lineAt(linePos);
 						// @ts-ignore
 						if (!(/^\s*([-*+]|\d+\.)\s\[(.)\]/.test(this.view.state.doc.slice(line.from, line.to).text))) return;
+						// @ts-ignore
 						const range = this.calculateRangeForTransform(this.view.state, line.to);
 						if (!range) continue;
 						// @ts-ignore
@@ -236,8 +239,8 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 			public calculateTasksNum(textArray: string[], bullet: boolean): tasks {
 				let completed: number = 0;
 				let total: number = 0;
-				let level: number = null;
-				if (!textArray) return;
+				let level: number = 0;
+				if (!textArray) return { completed: 0, total: 0 };
 				// @ts-ignore
 				const tabSize = app.vault.getConfig("tabSize");
 				let bulletCompleteRegex: RegExp = new RegExp("\\s+([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
@@ -245,6 +248,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
 				let headingTotalRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				if (plugin?.settings.countSubLevel && bullet) {
+					// @ts-ignore
 					level = textArray[0].match(/^\s*/)[0].length / tabSize;
 					// Total regex based on indent level
 					bulletTotalRegex = new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[(.)\\]");
@@ -254,9 +258,9 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 					headingTotalRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				}
 				if (plugin?.settings.alternativeMarks.length > 0 && plugin?.settings.allowAlternateTaskStatus) {
-					bulletCompleteRegex = level !== null ? new RegExp("^\\s{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("\\s+([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
+					bulletCompleteRegex = level !== 0 ? new RegExp("^\\s{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("\\s+([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
 					if (plugin?.settings.addTaskProgressBarToHeading) {
-						headingCompleteRegex = level !== null ? new RegExp("^([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]");
+						headingCompleteRegex = level !== 0 ? new RegExp("^([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]");
 					}
 				}
 				for (let i = 0; i < textArray.length; i++) {
