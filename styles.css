@@ -15,7 +15,27 @@
 
 .progress-bar-inline {
 	border-radius: 10px;
+	height: 8px;
+}
 
+.progress-bar-inline-0 {
+	background-color: #AE431E;
+}
+
+.progress-bar-inline-1 {
+	background-color: #E5890A;
+}
+
+.progress-bar-inline-2 {
+	background-color: #B4C6A6;
+}
+
+.progress-bar-inline-3 {
+	background-color: #6BCB77;
+}
+
+.progress-bar-inline-4 {
+	background-color: #4D96FF;
 }
 
 .progress-bar-inline-background {
@@ -32,7 +52,6 @@
 
 .cm-task-progress-bar.with-number {
 	display: inline-flex;
-	flex-direction: row-reverse;
 	align-items: center;
 }
 
