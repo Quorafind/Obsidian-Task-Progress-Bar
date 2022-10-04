@@ -25,6 +25,11 @@ interface Text {
 }
 
 class TaskProgressBarWidget extends WidgetType {
+	progressBarEl: HTMLSpanElement;
+	progressBackGroundEl: HTMLDivElement;
+	progressEl: HTMLDivElement;
+	numberEl: HTMLDivElement;
+
 	constructor(
 		readonly app: App,
 		readonly plugin: TaskProgressBarPlugin,
@@ -57,45 +62,61 @@ class TaskProgressBarWidget extends WidgetType {
 		return other.view === this.view && other.from === this.from && other.to === this.to;
 	}
 
-	toDOM() {
-		const progressBarEl = createSpan(this.plugin?.settings.addNumberToProgressBar ? 'cm-task-progress-bar with-number' : 'cm-task-progress-bar');
-		const progressBackGroundEl = document.createElement('div');
-		const progressEl = document.createElement('div');
-
+	changePercentage() {
 		const percentage = Math.round(this.completed / this.total * 10000) / 100;
-		progressEl.style.width = percentage + '%';
-		progressEl.style.height = '8px';
+		this.progressEl.style.width = percentage + '%';
 		switch (true) {
 			case percentage >= 0 && percentage < 25:
-				progressEl.style.backgroundColor = '#AE431E'
+				this.progressEl.className = 'progress-bar-inline progress-bar-inline-0';
 				break;
 			case percentage >= 25 && percentage < 50:
-				progressEl.style.backgroundColor = '#E5890A'
+				this.progressEl.className = 'progress-bar-inline progress-bar-inline-1';
 				break;
 			case percentage >= 50 && percentage < 75:
-				progressEl.style.backgroundColor = '#B4C6A6'
+				this.progressEl.className = 'progress-bar-inline progress-bar-inline-2';
 				break;
 			case percentage >= 75 && percentage < 100:
-				progressEl.style.backgroundColor = '#6BCB77'
+				this.progressEl.className = 'progress-bar-inline progress-bar-inline-3';
 				break;
 			case percentage >= 100:
-				progressEl.style.backgroundColor = '#4D96FF'
+				this.progressEl.className = 'progress-bar-inline progress-bar-inline-4';
 				break;
 		}
-		progressBackGroundEl.setAttribute('class', 'progress-bar-inline-background');
-		progressEl.setAttribute('class', 'progress-bar-inline');
+	}
 
-		if (this.plugin?.settings.addNumberToProgressBar && this.total) {
-			const numberEl = document.createElement('div');
-			numberEl.setAttribute('class', 'progress-status');
-			numberEl.appendChild(document.createTextNode('[' + this.completed + '/' + this.total + ']'));
-			progressBarEl.appendChild(numberEl);
+	changeNumber() {
+		if (this.plugin?.settings.addNumberToProgressBar) {
+			this.numberEl = this.progressBarEl.createEl('div', {
+				cls: 'progress-status',
+				text: `[${ this.completed }/${ this.total }]`
+			});
+		}
+		this.numberEl.innerText = `[${ this.completed }/${ this.total }]`;
+	}
+
+	toDOM() {
+		if (!this.plugin?.settings.addNumberToProgressBar && this.numberEl !== undefined) this.numberEl.detach();
+
+		if (this.progressBarEl !== undefined) {
+			this.changePercentage();
+			if (this.numberEl !== undefined) this.changeNumber();
+			return this.progressBarEl;
 		}
 
-		progressBarEl.appendChild(progressBackGroundEl);
-		progressBackGroundEl.appendChild(progressEl);
+		this.progressBarEl = createSpan(this.plugin?.settings.addNumberToProgressBar ? 'cm-task-progress-bar with-number' : 'cm-task-progress-bar');
+		this.progressBackGroundEl = this.progressBarEl.createEl('div', { cls: 'progress-bar-inline-background' });
+		this.progressEl = this.progressBackGroundEl.createEl('div');
 
-		return progressBarEl;
+		if (this.plugin?.settings.addNumberToProgressBar && this.total) {
+			this.numberEl = this.progressBarEl.createEl('div', {
+				cls: 'progress-status',
+				text: `[${ this.completed }/${ this.total }]`
+			});
+		}
+
+		this.changePercentage();
+
+		return this.progressBarEl;
 	}
 
 	ignoreEvent() {
@@ -153,6 +174,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 							// @ts-ignore
 							if (this.view.state.doc.slice(range.from, range.to).text === undefined && this.view.state.doc.slice(range.from, range.to).children?.length > 0) {
 								let allChildrenText: string[] = [];
+								// @ts-ignore
 								for (let i = 0; i < this.view.state.doc.slice(range.from, range.to).children?.length; i++) {
 									// @ts-ignore
 									allChildrenText = allChildrenText.concat(this.view.state.doc.slice(range.from, range.to).children[i].text);
@@ -216,6 +238,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				let total: number = 0;
 				let level: number = null;
 				if (!textArray) return;
+				// @ts-ignore
 				const tabSize = app.vault.getConfig("tabSize");
 				let bulletCompleteRegex: RegExp = new RegExp("\\s+([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
 				let bulletTotalRegex: RegExp = new RegExp("[\\t|\\s]+([-*+]|\\d+\\.)\\s\\[(.)\\]");
