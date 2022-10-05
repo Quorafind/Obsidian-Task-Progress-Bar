@@ -163,6 +163,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 							console.debug(err);
 							continue;
 						}
+						// Showing task progress bar near heading items.
 						while (!headingCursor.next().done) {
 							let { from, to } = headingCursor.value;
 							const headingLine = this.view.state.doc.lineAt(from);
@@ -189,9 +190,12 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 							progressDecos.push(startDeco.range(headingLine.to, headingLine.to));
 						}
 					}
+					// Showing task progress bar near bullet items.
 					while (!taskBulletCursor.next().done) {
 						let { from } = taskBulletCursor.value;
 						const linePos = view.state.doc.lineAt(from)?.from;
+
+						// Don't parse any tasks in code blocks or frontmatter
 						// @ts-ignore
 						let syntaxNode = syntaxTree(view.state).resolveInner(linePos + 1),
 							// @ts-ignore
@@ -201,15 +205,29 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 							);
 						if (excludedSection) continue;
 						const line = this.view.state.doc.lineAt(linePos);
+
+
 						// @ts-ignore
 						if (!(/^\s*([-*+]|\d+\.)\s\[(.)\]/.test(this.view.state.doc.slice(line.from, line.to).text))) return;
 						// @ts-ignore
 						const range = this.calculateRangeForTransform(this.view.state, line.to);
 						if (!range) continue;
+						let tasksNum;
 						// @ts-ignore
-						if ((this.view.state.doc.slice(range.from, range.to).text.length === 1)) continue;
+						if ((this.view.state.doc.slice(range.from, range.to).text?.length === 1)) continue;
 						// @ts-ignore
-						const tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, true);
+						if (this.view.state.doc.slice(range.from, range.to).text === undefined && this.view.state.doc.slice(range.from, range.to).children?.length !== undefined) {
+							let allChildrenText: string[] = [];
+							// @ts-ignore
+							for (let i = 0; i < this.view.state.doc.slice(range.from, range.to).children?.length; i++) {
+								// @ts-ignore
+								allChildrenText = allChildrenText.concat(this.view.state.doc.slice(range.from, range.to).children[i].text);
+							}
+							tasksNum = this.calculateTasksNum(allChildrenText, true);
+						} else {
+							// @ts-ignore
+							tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, true);
+						}
 						if (tasksNum.total === 0) continue;
 						let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, plugin, view, line.to, line.to, tasksNum.completed, tasksNum.total) });
 						progressDecos.push(startDeco.range(line.to, line.to));
@@ -224,10 +242,6 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 			public calculateRangeForTransform(state: EditorState, pos: number) {
 				const line = state.doc.lineAt(pos);
 				const foldRange = foldable(state, line.from, line.to);
-
-				// if (!foldRange && /^\s*([-*+]|\d+\.)\s+/.test(line.text)) {
-				// 	return { from: line.from, to: line.to };
-				// }
 
 				if (!foldRange) {
 					return null;
