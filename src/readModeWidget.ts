@@ -88,8 +88,6 @@ class ProgressBar {
 
 		this.numberEl?.detach();
 
-		console.log(checked, total);
-
 		this.completed = checked;
 		this.total = total;
 	}
@@ -124,6 +122,8 @@ class ProgressBar {
 				cls: 'progress-status',
 				text: text
 			});
+
+			return;
 		}
 		this.numberEl.innerText = `[${this.completed}/${this.total}]`;
 	}

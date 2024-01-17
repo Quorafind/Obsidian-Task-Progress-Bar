@@ -268,7 +268,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 
 				let bulletCompleteRegex: RegExp = new RegExp(/^[\t|\s]+([-*+]|\d+\.)\s+\[[^ ]\]/);
 				let bulletTotalRegex: RegExp = new RegExp(/^[\t|\s]+([-*+]|\d+\.)\s\[(.)\]/);
-				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
+				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[[^ ]\\]");
 				let headingTotalRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				if (!plugin?.settings.countSubLevel && bullet) {
 					// @ts-ignore
@@ -280,6 +280,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				if (plugin?.settings.countSubLevel && !bullet) {
 					level = 0;
 					headingTotalRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[(.)\\]");
+					headingCompleteRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[[^ ]\\]");
 				}
 				if (plugin?.settings.alternativeMarks.length > 0 && plugin?.settings.allowAlternateTaskStatus) {
 					const lengText = !plugin?.settings.countSubLevel && bullet ? `{${(tabSize * (level + 1))}}` : "";
