@@ -4,6 +4,7 @@ import { taskProgressBarExtension } from './taskProgressBarWidget';
 interface TaskProgressBarSettings {
 	addTaskProgressBarToHeading: boolean;
 	addNumberToProgressBar: boolean;
+	showPercentage: boolean;
 	allowAlternateTaskStatus: boolean;
 	alternativeMarks: string;
 	countSubLevel: boolean;
@@ -12,10 +13,11 @@ interface TaskProgressBarSettings {
 const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	addTaskProgressBarToHeading: false,
 	addNumberToProgressBar: false,
+	showPercentage: false,
 	allowAlternateTaskStatus: false,
 	alternativeMarks: '(x|X|-)',
 	countSubLevel: true,
-}
+};
 
 export default class TaskProgressBarPlugin extends Plugin {
 	settings: TaskProgressBarSettings;
@@ -59,11 +61,11 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const { containerEl } = this;
+		const {containerEl} = this;
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: '📍 Task Progress Bar' });
+		containerEl.createEl('h2', {text: '📍 Task Progress Bar'});
 
 		new Setting(containerEl)
 			.setName('Add progress bar to Heading')
@@ -74,14 +76,7 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 					this.applySettingsUpdate();
 				}));
 
-		new Setting(containerEl)
-			.setName('Add number to the Progress Bar')
-			.setDesc('Toggle this to allow this plugin to add tasks number to progress bar.')
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.addNumberToProgressBar).onChange(async (value) => {
-					this.plugin.settings.addNumberToProgressBar = value;
-					this.applySettingsUpdate();
-				}));
+		this.showNumberToProgressbar();
 
 		new Setting(containerEl)
 			.setName('Only count children of current Task')
@@ -119,7 +114,7 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 			);
 
 
-		this.containerEl.createEl('h2', { text: 'Say Thank You' });
+		this.containerEl.createEl('h2', {text: 'Say Thank You'});
 
 		new Setting(containerEl)
 			.setName('Donate')
@@ -127,5 +122,32 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 			.addButton((bt) => {
 				bt.buttonEl.outerHTML = `<a href="https://www.buymeacoffee.com/boninall"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=boninall&button_colour=6495ED&font_colour=ffffff&font_family=Inter&outline_colour=000000&coffee_colour=FFDD00"></a>`;
 			});
+	}
+
+
+	showNumberToProgressbar() {
+		new Setting(this.containerEl)
+			.setName('Add number to the Progress Bar')
+			.setDesc('Toggle this to allow this plugin to add tasks number to progress bar.')
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.addNumberToProgressBar).onChange(async (value) => {
+					this.plugin.settings.addNumberToProgressBar = value;
+					this.applySettingsUpdate();
+
+					setTimeout(() => {
+						this.display();
+					}, 200);
+				}));
+
+		if (this.plugin.settings.addNumberToProgressBar) {
+			new Setting(this.containerEl)
+				.setName('Show percentage')
+				.setDesc('Toggle this to allow this plugin to show percentage in the progress bar.')
+				.addToggle((toggle) =>
+					toggle.setValue(this.plugin.settings.showPercentage).onChange(async (value) => {
+						this.plugin.settings.showPercentage = value;
+						this.applySettingsUpdate();
+					}));
+		}
 	}
 }
