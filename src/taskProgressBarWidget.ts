@@ -85,12 +85,14 @@ class TaskProgressBarWidget extends WidgetType {
 
 	changeNumber() {
 		if (this.plugin?.settings.addNumberToProgressBar) {
+			const text = this.plugin?.settings.showPercentage ? `${Math.round(this.completed / this.total * 10000) / 100}%` : `[${this.completed}/${this.total}]`;
+
 			this.numberEl = this.progressBarEl.createEl('div', {
 				cls: 'progress-status',
-				text: `[${ this.completed }/${ this.total }]`
+				text: text
 			});
 		}
-		this.numberEl.innerText = `[${ this.completed }/${ this.total }]`;
+		this.numberEl.innerText = `[${this.completed}/${this.total}]`;
 	}
 
 	toDOM() {
@@ -103,14 +105,18 @@ class TaskProgressBarWidget extends WidgetType {
 		}
 
 		this.progressBarEl = createSpan(this.plugin?.settings.addNumberToProgressBar ? 'cm-task-progress-bar with-number' : 'cm-task-progress-bar');
-		this.progressBackGroundEl = this.progressBarEl.createEl('div', { cls: 'progress-bar-inline-background' });
+		this.progressBackGroundEl = this.progressBarEl.createEl('div', {cls: 'progress-bar-inline-background'});
 		this.progressEl = this.progressBackGroundEl.createEl('div');
 
 		if (this.plugin?.settings.addNumberToProgressBar && this.total) {
+
+			const text = this.plugin?.settings.showPercentage ? `${Math.round(this.completed / this.total * 10000) / 100}%` : `[${this.completed}/${this.total}]`;
+
 			this.numberEl = this.progressBarEl.createEl('div', {
 				cls: 'progress-status',
-				text: `[${ this.completed }/${ this.total }]`
+				text: text
 			});
+			
 		}
 
 		this.changePercentage();
@@ -130,13 +136,13 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 
 			constructor(public view: EditorView) {
 
-				let { progress } = this.getDeco(view);
+				let {progress} = this.getDeco(view);
 				this.progressDecorations = progress;
 			}
 
 			update(update: ViewUpdate) {
 				if (update.docChanged || update.viewportChanged) {
-					let { progress } = this.getDeco(update.view);
+					let {progress} = this.getDeco(update.view);
 					this.progressDecorations = progress;
 				}
 			}
@@ -144,14 +150,14 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 			getDeco(view: EditorView): {
 				progress: DecorationSet;
 			} {
-				let { state } = view,
+				let {state} = view,
 					// @ts-ignore
 					progressDecos: Range<Decoration>[] = [];
 				for (let part of view.visibleRanges) {
 					let taskBulletCursor: RegExpCursor | SearchCursor;
 					let headingCursor: RegExpCursor | SearchCursor;
 					try {
-						taskBulletCursor = new RegExpCursor(state.doc, "^\\s*([-*+]|\\d+\\.)\\s\\[(.)\\]", {}, part.from, part.to);
+						taskBulletCursor = new RegExpCursor(state.doc, "^[\\t|\\s]*([-*+]|\\d+\\.)\\s\\[(.)\\]", {}, part.from, part.to);
 					} catch (err) {
 						console.debug(err);
 						continue;
@@ -165,7 +171,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 						}
 						// Showing task progress bar near heading items.
 						while (!headingCursor.next().done) {
-							let { from, to } = headingCursor.value;
+							let {from, to} = headingCursor.value;
 							const headingLine = this.view.state.doc.lineAt(from);
 							// @ts-ignore
 							const range = this.calculateRangeForTransform(this.view.state, headingLine.from);
@@ -186,13 +192,13 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 								tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, false);
 							}
 							if (tasksNum?.total === 0) continue;
-							let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, plugin, view, headingLine.to, headingLine.to, tasksNum.completed, tasksNum.total) });
+							let startDeco = Decoration.widget({widget: new TaskProgressBarWidget(app, plugin, view, headingLine.to, headingLine.to, tasksNum.completed, tasksNum.total)});
 							progressDecos.push(startDeco.range(headingLine.to, headingLine.to));
 						}
 					}
 					// Showing task progress bar near bullet items.
 					while (!taskBulletCursor.next().done) {
-						let { from } = taskBulletCursor.value;
+						let {from} = taskBulletCursor.value;
 						const linePos = view.state.doc.lineAt(from)?.from;
 
 						// Don't parse any tasks in code blocks or frontmatter
@@ -208,7 +214,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 
 
 						// @ts-ignore
-						if (!(/^\s*([-*+]|\d+\.)\s\[(.)\]/.test(this.view.state.doc.slice(line.from, line.to).text))) return;
+						if (!(/^[\s|\t]*([-*+]|\d+\.)\s\[(.)\]/.test(this.view.state.doc.slice(line.from, line.to).text))) return;
 						// @ts-ignore
 						const range = this.calculateRangeForTransform(this.view.state, line.to);
 						if (!range) continue;
@@ -229,7 +235,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 							tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, true);
 						}
 						if (tasksNum.total === 0) continue;
-						let startDeco = Decoration.widget({ widget: new TaskProgressBarWidget(app, plugin, view, line.to, line.to, tasksNum.completed, tasksNum.total) });
+						let startDeco = Decoration.widget({widget: new TaskProgressBarWidget(app, plugin, view, line.to, line.to, tasksNum.completed, tasksNum.total)});
 						progressDecos.push(startDeco.range(line.to, line.to));
 					}
 				}
@@ -247,23 +253,26 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 					return null;
 				}
 
-				return { from: line.from, to: foldRange.to };
+				return {from: line.from, to: foldRange.to};
 			}
 
 			public calculateTasksNum(textArray: string[], bullet: boolean): tasks {
 				let completed: number = 0;
 				let total: number = 0;
 				let level: number = 0;
-				if (!textArray) return { completed: 0, total: 0 };
+				if (!textArray) return {completed: 0, total: 0};
 				// @ts-ignore
-				const tabSize = app.vault.getConfig("tabSize");
-				let bulletCompleteRegex: RegExp = new RegExp("\\s+([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
-				let bulletTotalRegex: RegExp = new RegExp("[\\t|\\s]+([-*+]|\\d+\\.)\\s\\[(.)\\]");
+				const useTab = (app.vault.getConfig("useTab") === undefined || app.vault.getConfig("useTab") === true);
+				// @ts-ignore
+				const tabSize = useTab ? app.vault.getConfig("tabSize") / 4 : app.vault.getConfig("tabSize");
+
+				let bulletCompleteRegex: RegExp = new RegExp(/[\t|\s]+([-*+]|\d+\.)\s+\[[^ ]\]/);
+				let bulletTotalRegex: RegExp = new RegExp(/[\t|\s]+([-*+]|\d+\.)\s\[(.)\]/);
 				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
 				let headingTotalRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				if (plugin?.settings.countSubLevel && bullet) {
 					// @ts-ignore
-					level = textArray[0].match(/^\s*/)[0].length / tabSize;
+					level = textArray[0].match(/^[\s|\t]*/)[0].length / tabSize;
 					// Total regex based on indent level
 					bulletTotalRegex = new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				}
@@ -272,7 +281,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 					headingTotalRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				}
 				if (plugin?.settings.alternativeMarks.length > 0 && plugin?.settings.allowAlternateTaskStatus) {
-					bulletCompleteRegex = level !== 0 ? new RegExp("^\\s{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("\\s+([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
+					bulletCompleteRegex = level !== 0 ? new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("[\\t|\\s]+([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
 					if (plugin?.settings.addTaskProgressBarToHeading) {
 						headingCompleteRegex = level !== 0 ? new RegExp("^([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]");
 					}
@@ -291,7 +300,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 						if (textArray[i].match(headingCompleteRegex)) completed++;
 					}
 				}
-				return { completed: completed, total: total };
+				return {completed: completed, total: total};
 			};
 		},
 		{
