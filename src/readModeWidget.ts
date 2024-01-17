@@ -1,5 +1,5 @@
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
-import { MarkdownPostProcessorContext } from "obsidian";
+import { Component, MarkdownPostProcessorContext } from "obsidian";
 
 interface GroupElement {
 	parentElement: HTMLElement;
@@ -29,17 +29,11 @@ function groupElementsByParent(childrenElements: HTMLElement[]) {
 	return result;
 }
 
-export function updateProgressBarInElement({plugin, element, ctx}: {
-	plugin: TaskProgressBarPlugin, element: HTMLElement, ctx: MarkdownPostProcessorContext
-}) {
-	if (!element.find('ul.contains-task-list')) return;
-
-	const elements = element.findAll('.task-list-item');
-	const groupedElements = groupElementsByParent(elements);
+function loadProgressbar(plugin: TaskProgressBarPlugin, groupedElements: GroupElement[], type: 'dataview' | 'normal') {
 	for (let group of groupedElements) {
 		if (group.parentElement.parentElement && group.parentElement?.parentElement.hasClass('task-list-item')) {
 
-			const progressBar = new ProgressBar(plugin, group).onload();
+			const progressBar = new ProgressBar(plugin, group, type).onload();
 
 			const previousSibling = group.parentElement.previousElementSibling;
 			if (previousSibling && previousSibling.tagName === 'P') {
@@ -51,8 +45,28 @@ export function updateProgressBarInElement({plugin, element, ctx}: {
 	}
 }
 
+export function updateProgressBarInElement({plugin, element, ctx}: {
+	plugin: TaskProgressBarPlugin, element: HTMLElement, ctx: MarkdownPostProcessorContext
+}) {
+	console.log('updateProgressBarInElement');
+	if (element.find('ul.contains-task-list')) {
 
-class ProgressBar {
+		const elements = element.findAll('.task-list-item');
+		const groupedElements = groupElementsByParent(elements);
+		loadProgressbar(plugin, groupedElements, 'normal');
+	} else if (element.closest('.dataview-container')) {
+		const parentElement = element.closest('.dataview-container');
+		if (!parentElement) return;
+		if (parentElement.getAttribute('data-task-progress-bar') === 'true') return;
+		const elements = parentElement.findAll('.task-list-item');
+		const groupedElements = groupElementsByParent(elements);
+		loadProgressbar(plugin, groupedElements, 'dataview');
+		parentElement.setAttribute('data-task-progress-bar', 'true');
+	}
+}
+
+
+class ProgressBar extends Component {
 	progressBarEl: HTMLSpanElement;
 	progressBackGroundEl: HTMLDivElement;
 	progressEl: HTMLDivElement;
@@ -65,21 +79,46 @@ class ProgressBar {
 
 	group: GroupElement;
 
-	constructor(plugin: TaskProgressBarPlugin, group: GroupElement) {
+	constructor(plugin: TaskProgressBarPlugin, group: GroupElement, readonly type: 'dataview' | 'normal') {
+		super();
 		this.plugin = plugin;
 
 		this.group = group;
-		this.updateCompletedAndTotal();
+		this.type === 'dataview' && this.updateCompletedAndTotalDataview();
+		this.type === 'normal' && this.updateCompletedAndTotal();
 
 		for (let el of this.group.childrenElement) {
-			el.on('click', 'input', () => {
+			this.type === 'normal' && el.on('click', 'input', () => {
 				setTimeout(() => {
 					this.updateCompletedAndTotal();
 					this.changePercentage();
 					this.changeNumber();
 				}, 200);
 			});
+
+			this.type === 'dataview' && this.registerDomEvent(el, 'mousedown', (ev) => {
+				if (!ev.target) return;
+				if ((ev.target as HTMLElement).tagName === 'INPUT') {
+					setTimeout(() => {
+						console.log('click');
+						console.log(el);
+						this.updateCompletedAndTotalDataview();
+						this.changePercentage();
+						this.changeNumber();
+					}, 200);
+				}
+			});
 		}
+	}
+
+	updateCompletedAndTotalDataview() {
+		const checked = this.group.childrenElement.filter((el) => el.getAttribute('data-task') && el.getAttribute('data-task') !== ' ').length;
+		const total = this.group.childrenElement.length;
+
+		this.numberEl?.detach();
+
+		this.completed = checked;
+		this.total = total;
 	}
 
 	updateCompletedAndTotal() {
@@ -147,5 +186,10 @@ class ProgressBar {
 		this.changePercentage();
 
 		return this.progressBarEl;
+	}
+
+	onunload() {
+		super.onunload();
+
 	}
 }
