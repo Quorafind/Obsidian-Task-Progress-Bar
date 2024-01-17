@@ -58,7 +58,7 @@ class TaskProgressBarWidget extends WidgetType {
 		if (offset.line === originalOffset.line && this.completed === other.completed && this.total === other.total) {
 			return true;
 		}
-		return other.view === this.view && other.from === this.from && other.to === this.to;
+		return other.completed === this.completed && other.total === this.total;
 	}
 
 	changePercentage() {
@@ -116,7 +116,7 @@ class TaskProgressBarWidget extends WidgetType {
 				cls: 'progress-status',
 				text: text
 			});
-			
+
 		}
 
 		this.changePercentage();
@@ -266,26 +266,30 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				// @ts-ignore
 				const tabSize = useTab ? app.vault.getConfig("tabSize") / 4 : app.vault.getConfig("tabSize");
 
-				let bulletCompleteRegex: RegExp = new RegExp(/[\t|\s]+([-*+]|\d+\.)\s+\[[^ ]\]/);
-				let bulletTotalRegex: RegExp = new RegExp(/[\t|\s]+([-*+]|\d+\.)\s\[(.)\]/);
+				let bulletCompleteRegex: RegExp = new RegExp(/^[\t|\s]+([-*+]|\d+\.)\s+\[[^ ]\]/);
+				let bulletTotalRegex: RegExp = new RegExp(/^[\t|\s]+([-*+]|\d+\.)\s\[(.)\]/);
 				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s+\\[[^ ]\\]");
 				let headingTotalRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[(.)\\]");
-				if (plugin?.settings.countSubLevel && bullet) {
+				if (!plugin?.settings.countSubLevel && bullet) {
 					// @ts-ignore
 					level = textArray[0].match(/^[\s|\t]*/)[0].length / tabSize;
 					// Total regex based on indent level
 					bulletTotalRegex = new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[(.)\\]");
+					bulletCompleteRegex = new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[[^ ]\\]");
 				}
 				if (plugin?.settings.countSubLevel && !bullet) {
 					level = 0;
 					headingTotalRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				}
 				if (plugin?.settings.alternativeMarks.length > 0 && plugin?.settings.allowAlternateTaskStatus) {
-					bulletCompleteRegex = level !== 0 ? new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("[\\t|\\s]+([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]");
+					const lengText = !plugin?.settings.countSubLevel && bullet ? `{${(tabSize * (level + 1))}}` : "";
+
+					bulletCompleteRegex = level !== 0 ? new RegExp("^[\\t|\\s]" + `${lengText}` + "([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : (new RegExp("[\\t|\\s]" + `${lengText}` + "([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]"));
 					if (plugin?.settings.addTaskProgressBarToHeading) {
 						headingCompleteRegex = level !== 0 ? new RegExp("^([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]");
 					}
 				}
+
 				for (let i = 0; i < textArray.length; i++) {
 					if (i === 0) {
 						continue;

@@ -1,5 +1,6 @@
 import { App, Editor, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { taskProgressBarExtension } from './taskProgressBarWidget';
+import { taskProgressBarExtension } from './widget';
+import { updateProgressBarInElement } from "./readModeWidget";
 
 interface TaskProgressBarSettings {
 	addTaskProgressBarToHeading: boolean;
@@ -27,7 +28,11 @@ export default class TaskProgressBarPlugin extends Plugin {
 
 		this.addSettingTab(new TaskProgressBarSettingTab(this.app, this));
 		this.registerEditorExtension(taskProgressBarExtension(this.app, this));
-
+		this.registerMarkdownPostProcessor((el, ctx) => {
+			updateProgressBarInElement({
+				plugin: this, element: el, ctx: ctx
+			});
+		});
 	}
 
 	onunload() {
@@ -79,8 +84,8 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 		this.showNumberToProgressbar();
 
 		new Setting(containerEl)
-			.setName('Only count children of current Task')
-			.setDesc('Toggle this to allow this plugin to count the tasks in one level, but not in sub-levels.')
+			.setName('Count sub children level of current Task')
+			.setDesc('Toggle this to allow this plugin to count sub tasks.')
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.countSubLevel).onChange(async (value) => {
 					this.plugin.settings.countSubLevel = value;
