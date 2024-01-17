@@ -4,6 +4,22 @@ A plugin for showing task progress bar near the tasks bullet or headings. Only w
 
 ![example](./media/example.gif)
 
+# Usage
+
+For example, when you create a task list like this:
+
+```markdown
+- [ ] task1 [ ] [0/1] // Here is the progress bar
+	- [ ] task2 // Indent by press tab
+```
+
+When you finished the task2,
+
+```markdown
+- [ ] task1 [|] [1/1] // The progress bar will be updated
+	- [x] task2 // Indent by press tab
+```
+
 ## Settings
 
 1. Add progress bar to Heading: Make the Heading showing the task progress bars.
