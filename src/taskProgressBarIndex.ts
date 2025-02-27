@@ -1,5 +1,5 @@
-import { App, Editor, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { taskProgressBarExtension } from './widget';
+import { App, Editor, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { taskProgressBarExtension } from "./widget";
 import { updateProgressBarInElement } from "./readModeWidget";
 
 interface TaskProgressBarSettings {
@@ -9,6 +9,10 @@ interface TaskProgressBarSettings {
 	allowAlternateTaskStatus: boolean;
 	alternativeMarks: string;
 	countSubLevel: boolean;
+	hideProgressBarBasedOnConditions: boolean;
+	hideProgressBarTags: string;
+	hideProgressBarFolders: string;
+	hideProgressBarMetadata: string;
 }
 
 const DEFAULT_SETTINGS: TaskProgressBarSettings = {
@@ -16,8 +20,12 @@ const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	addNumberToProgressBar: false,
 	showPercentage: false,
 	allowAlternateTaskStatus: false,
-	alternativeMarks: '(x|X|-)',
+	alternativeMarks: "(x|X|-)",
 	countSubLevel: true,
+	hideProgressBarBasedOnConditions: false,
+	hideProgressBarTags: "no-progress-bar",
+	hideProgressBarFolders: "",
+	hideProgressBarMetadata: "hide-progress-bar",
 };
 
 export default class TaskProgressBarPlugin extends Plugin {
@@ -30,17 +38,21 @@ export default class TaskProgressBarPlugin extends Plugin {
 		this.registerEditorExtension(taskProgressBarExtension(this.app, this));
 		this.registerMarkdownPostProcessor((el, ctx) => {
 			updateProgressBarInElement({
-				plugin: this, element: el, ctx: ctx
+				plugin: this,
+				element: el,
+				ctx: ctx,
 			});
 		});
 	}
 
-	onunload() {
-
-	}
+	onunload() {}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
 	}
 
 	async saveSettings() {
@@ -66,43 +78,57 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: '📍 Task Progress Bar'});
+		containerEl.createEl("h2", { text: "📍 Task Progress Bar" });
 
 		new Setting(containerEl)
-			.setName('Add progress bar to Heading')
-			.setDesc('Toggle this to allow this plugin to add progress bar for Task below the headings.')
+			.setName("Add progress bar to Heading")
+			.setDesc(
+				"Toggle this to allow this plugin to add progress bar for Task below the headings."
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.addTaskProgressBarToHeading).onChange(async (value) => {
-					this.plugin.settings.addTaskProgressBarToHeading = value;
-					this.applySettingsUpdate();
-				}));
+				toggle
+					.setValue(this.plugin.settings.addTaskProgressBarToHeading)
+					.onChange(async (value) => {
+						this.plugin.settings.addTaskProgressBarToHeading =
+							value;
+						this.applySettingsUpdate();
+					})
+			);
 
 		this.showNumberToProgressbar();
 
 		new Setting(containerEl)
-			.setName('Count sub children level of current Task')
-			.setDesc('Toggle this to allow this plugin to count sub tasks.')
+			.setName("Count sub children level of current Task")
+			.setDesc("Toggle this to allow this plugin to count sub tasks.")
 			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.countSubLevel).onChange(async (value) => {
-					this.plugin.settings.countSubLevel = value;
-					this.applySettingsUpdate();
-				}));
+				toggle
+					.setValue(this.plugin.settings.countSubLevel)
+					.onChange(async (value) => {
+						this.plugin.settings.countSubLevel = value;
+						this.applySettingsUpdate();
+					})
+			);
 
 		new Setting(containerEl)
-			.setName('Allow alternate task status')
-			.setDesc('Toggle this to allow this plugin to treat different tasks mark as completed or uncompleted tasks.')
+			.setName("Allow alternate task status")
+			.setDesc(
+				"Toggle this to allow this plugin to treat different tasks mark as completed or uncompleted tasks."
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.allowAlternateTaskStatus).onChange(async (value) => {
-					this.plugin.settings.allowAlternateTaskStatus = value;
-					this.applySettingsUpdate();
-				}));
+				toggle
+					.setValue(this.plugin.settings.allowAlternateTaskStatus)
+					.onChange(async (value) => {
+						this.plugin.settings.allowAlternateTaskStatus = value;
+						this.applySettingsUpdate();
+					})
+			);
 
 		new Setting(containerEl)
-			.setName('Completed alternative marks')
+			.setName("Completed alternative marks")
 			.setDesc('Set completed alternative marks here. Like "x|X|-"')
 			.addText((text) =>
 				text
@@ -110,49 +136,135 @@ class TaskProgressBarSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.alternativeMarks)
 					.onChange(async (value) => {
 						if (value.length === 0) {
-							this.plugin.settings.alternativeMarks = DEFAULT_SETTINGS.alternativeMarks;
+							this.plugin.settings.alternativeMarks =
+								DEFAULT_SETTINGS.alternativeMarks;
 						} else {
 							this.plugin.settings.alternativeMarks = value;
 						}
 						this.applySettingsUpdate();
-					}),
+					})
 			);
 
-
-		this.containerEl.createEl('h2', {text: 'Say Thank You'});
+		new Setting(containerEl)
+			.setName("Conditional Progress Bar Display")
+			.setHeading();
 
 		new Setting(containerEl)
-			.setName('Donate')
-			.setDesc('If you like this plugin, consider donating to support continued development:')
+			.setName("Hide progress bars based on conditions")
+			.setDesc(
+				"Toggle this to enable hiding progress bars based on tags, folders, or metadata."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.hideProgressBarBasedOnConditions
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.hideProgressBarBasedOnConditions =
+							value;
+						this.applySettingsUpdate();
+
+						setTimeout(() => {
+							this.display();
+						}, 200);
+					})
+			);
+
+		if (this.plugin.settings.hideProgressBarBasedOnConditions) {
+			new Setting(containerEl)
+				.setName("Hide by tags")
+				.setDesc(
+					'Specify tags that will hide progress bars (comma-separated, without #). Example: "no-progress-bar,hide-progress"'
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder(DEFAULT_SETTINGS.hideProgressBarTags)
+						.setValue(this.plugin.settings.hideProgressBarTags)
+						.onChange(async (value) => {
+							this.plugin.settings.hideProgressBarTags = value;
+							this.applySettingsUpdate();
+						})
+				);
+
+			new Setting(containerEl)
+				.setName("Hide by folders")
+				.setDesc(
+					'Specify folder paths that will hide progress bars (comma-separated). Example: "Daily Notes,Projects/Hidden"'
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder("folder1,folder2/subfolder")
+						.setValue(this.plugin.settings.hideProgressBarFolders)
+						.onChange(async (value) => {
+							this.plugin.settings.hideProgressBarFolders = value;
+							this.applySettingsUpdate();
+						})
+				);
+
+			new Setting(containerEl)
+				.setName("Hide by metadata")
+				.setDesc(
+					'Specify frontmatter metadata that will hide progress bars. Example: "hide-progress-bar: true"'
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder(
+							DEFAULT_SETTINGS.hideProgressBarMetadata
+						)
+						.setValue(this.plugin.settings.hideProgressBarMetadata)
+						.onChange(async (value) => {
+							this.plugin.settings.hideProgressBarMetadata =
+								value;
+							this.applySettingsUpdate();
+						})
+				);
+		}
+
+		this.containerEl.createEl("h2", { text: "Say Thank You" });
+
+		new Setting(containerEl)
+			.setName("Donate")
+			.setDesc(
+				"If you like this plugin, consider donating to support continued development:"
+			)
 			.addButton((bt) => {
 				bt.buttonEl.outerHTML = `<a href="https://www.buymeacoffee.com/boninall"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=boninall&button_colour=6495ED&font_colour=ffffff&font_family=Inter&outline_colour=000000&coffee_colour=FFDD00"></a>`;
 			});
 	}
 
-
 	showNumberToProgressbar() {
 		new Setting(this.containerEl)
-			.setName('Add number to the Progress Bar')
-			.setDesc('Toggle this to allow this plugin to add tasks number to progress bar.')
+			.setName("Add number to the Progress Bar")
+			.setDesc(
+				"Toggle this to allow this plugin to add tasks number to progress bar."
+			)
 			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.addNumberToProgressBar).onChange(async (value) => {
-					this.plugin.settings.addNumberToProgressBar = value;
-					this.applySettingsUpdate();
+				toggle
+					.setValue(this.plugin.settings.addNumberToProgressBar)
+					.onChange(async (value) => {
+						this.plugin.settings.addNumberToProgressBar = value;
+						this.applySettingsUpdate();
 
-					setTimeout(() => {
-						this.display();
-					}, 200);
-				}));
+						setTimeout(() => {
+							this.display();
+						}, 200);
+					})
+			);
 
 		if (this.plugin.settings.addNumberToProgressBar) {
 			new Setting(this.containerEl)
-				.setName('Show percentage')
-				.setDesc('Toggle this to allow this plugin to show percentage in the progress bar.')
+				.setName("Show percentage")
+				.setDesc(
+					"Toggle this to allow this plugin to show percentage in the progress bar."
+				)
 				.addToggle((toggle) =>
-					toggle.setValue(this.plugin.settings.showPercentage).onChange(async (value) => {
-						this.plugin.settings.showPercentage = value;
-						this.applySettingsUpdate();
-					}));
+					toggle
+						.setValue(this.plugin.settings.showPercentage)
+						.onChange(async (value) => {
+							this.plugin.settings.showPercentage = value;
+							this.applySettingsUpdate();
+						})
+				);
 		}
 	}
 }

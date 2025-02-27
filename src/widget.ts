@@ -5,23 +5,23 @@ import {
 	ViewPlugin,
 	ViewUpdate,
 	WidgetType,
-} from '@codemirror/view';
+} from "@codemirror/view";
 import { SearchCursor } from "@codemirror/search";
-import { App, MarkdownView } from 'obsidian';
-import { EditorState } from "@codemirror/state";
+import { App, editorInfoField, MarkdownView, TFile } from "obsidian";
+import { EditorState, Range } from "@codemirror/state";
 // @ts-ignore
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { RegExpCursor } from "./regexp-cursor";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import { shouldHideProgressBarInLivePriview } from "./utils";
 
 interface tasks {
 	completed: number;
 	total: number;
 }
 
-interface Text {
-	text: string;
-}
+
+
 
 class TaskProgressBarWidget extends WidgetType {
 	progressBarEl: HTMLSpanElement;
@@ -36,7 +36,7 @@ class TaskProgressBarWidget extends WidgetType {
 		readonly from: number,
 		readonly to: number,
 		readonly completed: number,
-		readonly total: number,
+		readonly total: number
 	) {
 		super();
 	}
@@ -55,48 +55,64 @@ class TaskProgressBarWidget extends WidgetType {
 		if (this.completed !== other.completed || this.total !== other.total) {
 			return false;
 		}
-		if (offset.line === originalOffset.line && this.completed === other.completed && this.total === other.total) {
+		if (
+			offset.line === originalOffset.line &&
+			this.completed === other.completed &&
+			this.total === other.total
+		) {
 			return true;
 		}
 		return other.completed === this.completed && other.total === this.total;
 	}
 
 	changePercentage() {
-		const percentage = Math.round(this.completed / this.total * 10000) / 100;
-		this.progressEl.style.width = percentage + '%';
+		const percentage =
+			Math.round((this.completed / this.total) * 10000) / 100;
+		this.progressEl.style.width = percentage + "%";
 		switch (true) {
 			case percentage >= 0 && percentage < 25:
-				this.progressEl.className = 'progress-bar-inline progress-bar-inline-0';
+				this.progressEl.className =
+					"progress-bar-inline progress-bar-inline-0";
 				break;
 			case percentage >= 25 && percentage < 50:
-				this.progressEl.className = 'progress-bar-inline progress-bar-inline-1';
+				this.progressEl.className =
+					"progress-bar-inline progress-bar-inline-1";
 				break;
 			case percentage >= 50 && percentage < 75:
-				this.progressEl.className = 'progress-bar-inline progress-bar-inline-2';
+				this.progressEl.className =
+					"progress-bar-inline progress-bar-inline-2";
 				break;
 			case percentage >= 75 && percentage < 100:
-				this.progressEl.className = 'progress-bar-inline progress-bar-inline-3';
+				this.progressEl.className =
+					"progress-bar-inline progress-bar-inline-3";
 				break;
 			case percentage >= 100:
-				this.progressEl.className = 'progress-bar-inline progress-bar-inline-4';
+				this.progressEl.className =
+					"progress-bar-inline progress-bar-inline-4";
 				break;
 		}
 	}
 
 	changeNumber() {
 		if (this.plugin?.settings.addNumberToProgressBar) {
-			const text = this.plugin?.settings.showPercentage ? `${Math.round(this.completed / this.total * 10000) / 100}%` : `[${this.completed}/${this.total}]`;
+			const text = this.plugin?.settings.showPercentage
+				? `${Math.round((this.completed / this.total) * 10000) / 100}%`
+				: `[${this.completed}/${this.total}]`;
 
-			this.numberEl = this.progressBarEl.createEl('div', {
-				cls: 'progress-status',
-				text: text
+			this.numberEl = this.progressBarEl.createEl("div", {
+				cls: "progress-status",
+				text: text,
 			});
 		}
 		this.numberEl.innerText = `[${this.completed}/${this.total}]`;
 	}
 
 	toDOM() {
-		if (!this.plugin?.settings.addNumberToProgressBar && this.numberEl !== undefined) this.numberEl.detach();
+		if (
+			!this.plugin?.settings.addNumberToProgressBar &&
+			this.numberEl !== undefined
+		)
+			this.numberEl.detach();
 
 		if (this.progressBarEl !== undefined) {
 			this.changePercentage();
@@ -104,19 +120,25 @@ class TaskProgressBarWidget extends WidgetType {
 			return this.progressBarEl;
 		}
 
-		this.progressBarEl = createSpan(this.plugin?.settings.addNumberToProgressBar ? 'cm-task-progress-bar with-number' : 'cm-task-progress-bar');
-		this.progressBackGroundEl = this.progressBarEl.createEl('div', {cls: 'progress-bar-inline-background'});
-		this.progressEl = this.progressBackGroundEl.createEl('div');
+		this.progressBarEl = createSpan(
+			this.plugin?.settings.addNumberToProgressBar
+				? "cm-task-progress-bar with-number"
+				: "cm-task-progress-bar"
+		);
+		this.progressBackGroundEl = this.progressBarEl.createEl("div", {
+			cls: "progress-bar-inline-background",
+		});
+		this.progressEl = this.progressBackGroundEl.createEl("div");
 
 		if (this.plugin?.settings.addNumberToProgressBar && this.total) {
+			const text = this.plugin?.settings.showPercentage
+				? `${Math.round((this.completed / this.total) * 10000) / 100}%`
+				: `[${this.completed}/${this.total}]`;
 
-			const text = this.plugin?.settings.showPercentage ? `${Math.round(this.completed / this.total * 10000) / 100}%` : `[${this.completed}/${this.total}]`;
-
-			this.numberEl = this.progressBarEl.createEl('div', {
-				cls: 'progress-status',
-				text: text
+			this.numberEl = this.progressBarEl.createEl("div", {
+				cls: "progress-status",
+				text: text,
 			});
-
 		}
 
 		this.changePercentage();
@@ -153,6 +175,14 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				let {state} = view,
 					// @ts-ignore
 					progressDecos: Range<Decoration>[] = [];
+
+				// Check if progress bars should be hidden based on settings
+				if (shouldHideProgressBarInLivePriview(plugin, view)) {
+					return {
+						progress: Decoration.none,
+					};
+				}
+ 
 				for (let part of view.visibleRanges) {
 					let taskBulletCursor: RegExpCursor | SearchCursor;
 					let headingCursor: RegExpCursor | SearchCursor;
@@ -304,6 +334,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 						if (textArray[i].match(headingTotalRegex)) total++;
 						if (textArray[i].match(headingCompleteRegex)) completed++;
 					}
+
 				}
 				return {completed: completed, total: total};
 			};
