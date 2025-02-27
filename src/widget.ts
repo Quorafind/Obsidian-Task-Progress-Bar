@@ -266,10 +266,10 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 				// @ts-ignore
 				const tabSize = useTab ? app.vault.getConfig("tabSize") / 4 : app.vault.getConfig("tabSize");
 
-				let bulletCompleteRegex: RegExp = new RegExp(/^[\t|\s]+([-*+]|\d+\.)\s+\[[^ ]\]/);
-				let bulletTotalRegex: RegExp = new RegExp(/^[\t|\s]+([-*+]|\d+\.)\s\[(.)\]/);
-				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[[^ ]\\]");
-				let headingTotalRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[(.)\\]");
+				let bulletCompleteRegex: RegExp = new RegExp(/^\s+([-*+]|\d+\.)\s+\[[^ ]\]/);
+				let bulletTotalRegex: RegExp = new RegExp(/^\s+([-*+]|\d+\.)\s\[(.)\]/);
+				let headingCompleteRegex: RegExp = new RegExp("^\\s*([-*+]|\\d+\\.)\\s\\[[^ ]\\]");
+				let headingTotalRegex: RegExp = new RegExp("^\\s*([-*+]|\\d+\\.)\\s\\[(.)\\]");
 				if (!plugin?.settings.countSubLevel && bullet) {
 					// @ts-ignore
 					level = textArray[0].match(/^[\s|\t]*/)[0].length / tabSize;
