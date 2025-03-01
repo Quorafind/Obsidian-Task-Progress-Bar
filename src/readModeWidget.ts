@@ -135,12 +135,45 @@ class ProgressBar extends Component {
 	}
 
 	updateCompletedAndTotalDataview() {
-		const checked = this.group.childrenElement.filter(
-			(el) =>
-				el.getAttribute("data-task") &&
-				el.getAttribute("data-task") !== " "
-		).length;
-		const total = this.group.childrenElement.length;
+		// Get all task elements
+		const allTasks = this.group.childrenElement;
+		let checked = 0;
+		let total = 0;
+
+		// Get settings for task markers
+		const excludeMarks = this.plugin?.settings.excludeTaskMarks
+			? this.plugin.settings.excludeTaskMarks.split("")
+			: [];
+		const onlyCountMarks = this.plugin?.settings.onlyCountTaskMarks
+			? this.plugin.settings.onlyCountTaskMarks.split("|")
+			: ["x", "X"];
+		const useOnlyCountMarks = this.plugin?.settings.useOnlyCountMarks;
+
+		// Process each task element
+		for (const el of allTasks) {
+			const taskMark = el.getAttribute("data-task");
+
+			// Skip if no task mark
+			if (!taskMark) continue;
+
+			// Count total tasks (excluding specified markers)
+			if (taskMark !== " " && !excludeMarks.includes(taskMark)) {
+				total++;
+			}
+
+			// Count completed tasks based on settings
+			if (useOnlyCountMarks) {
+				// Only count specific markers
+				if (onlyCountMarks.includes(taskMark)) {
+					checked++;
+				}
+			} else {
+				// Count all non-space markers (excluding specified markers)
+				if (taskMark !== " " && !excludeMarks.includes(taskMark)) {
+					checked++;
+				}
+			}
+		}
 
 		this.numberEl?.detach();
 
@@ -149,10 +182,31 @@ class ProgressBar extends Component {
 	}
 
 	updateCompletedAndTotal() {
-		const checked = this.group.childrenElement.filter((el) =>
-			el.hasClass("is-checked")
-		).length;
-		const total = this.group.childrenElement.length;
+		// Get all task elements
+		const allTasks = this.group.childrenElement;
+		let checked = 0;
+		let total = allTasks.length;
+
+		// Get settings for task markers
+		const excludeMarks = this.plugin?.settings.excludeTaskMarks
+			? this.plugin.settings.excludeTaskMarks.split("")
+			: [];
+		const onlyCountMarks = this.plugin?.settings.onlyCountTaskMarks
+			? this.plugin.settings.onlyCountTaskMarks.split("|")
+			: ["x", "X"];
+		const useOnlyCountMarks = this.plugin?.settings.useOnlyCountMarks;
+
+		// In normal mode, we can only distinguish between checked and unchecked
+		// So we'll only implement the "only count specific markers" feature
+		// The exclude feature is not applicable here since we can't determine the specific marker
+
+		if (useOnlyCountMarks) {
+			// For "only count specific markers" we need to check if the default checkbox is checked
+			// This is a limitation since we can't determine the specific marker in normal mode
+			checked = allTasks.filter((el) => el.hasClass("is-checked")).length;
+		} else {
+			checked = allTasks.filter((el) => el.hasClass("is-checked")).length;
+		}
 
 		this.numberEl?.detach();
 

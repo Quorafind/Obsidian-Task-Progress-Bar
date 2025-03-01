@@ -8,20 +8,23 @@ import {
 } from "@codemirror/view";
 import { SearchCursor } from "@codemirror/search";
 import { App, editorInfoField, MarkdownView, TFile } from "obsidian";
-import { EditorState, Range } from "@codemirror/state";
-// @ts-ignore
+import { EditorState, Range, Text } from "@codemirror/state";
+// @ts-ignore - This import is necessary but TypeScript can't find it
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { RegExpCursor } from "./regexp-cursor";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
 import { shouldHideProgressBarInLivePriview } from "./utils";
 
-interface tasks {
+interface Tasks {
 	completed: number;
 	total: number;
 }
 
-
-
+// Type to represent a text range for safe access
+interface TextRange {
+	from: number;
+	to: number;
+}
 
 class TaskProgressBarWidget extends WidgetType {
 	progressBarEl: HTMLSpanElement;
@@ -99,12 +102,19 @@ class TaskProgressBarWidget extends WidgetType {
 				? `${Math.round((this.completed / this.total) * 10000) / 100}%`
 				: `[${this.completed}/${this.total}]`;
 
-			this.numberEl = this.progressBarEl.createEl("div", {
-				cls: "progress-status",
-				text: text,
-			});
+			if (!this.numberEl) {
+				this.numberEl = this.progressBarEl.createEl("div", {
+					cls: "progress-status",
+					text: text,
+				});
+			} else {
+				this.numberEl.innerText = text;
+				return;
+			}
 		}
-		this.numberEl.innerText = `[${this.completed}/${this.total}]`;
+		if (this.numberEl) {
+			this.numberEl.innerText = `[${this.completed}/${this.total}]`;
+		}
 	}
 
 	toDOM() {
@@ -151,20 +161,22 @@ class TaskProgressBarWidget extends WidgetType {
 	}
 }
 
-export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin) {
+export function taskProgressBarExtension(
+	app: App,
+	plugin: TaskProgressBarPlugin
+) {
 	return ViewPlugin.fromClass(
 		class {
 			progressDecorations: DecorationSet = Decoration.none;
 
 			constructor(public view: EditorView) {
-
-				let {progress} = this.getDeco(view);
+				let { progress } = this.getDeco(view);
 				this.progressDecorations = progress;
 			}
 
 			update(update: ViewUpdate) {
 				if (update.docChanged || update.viewportChanged) {
-					let {progress} = this.getDeco(update.view);
+					let { progress } = this.getDeco(update.view);
 					this.progressDecorations = progress;
 				}
 			}
@@ -172,8 +184,7 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 			getDeco(view: EditorView): {
 				progress: DecorationSet;
 			} {
-				let {state} = view,
-					// @ts-ignore
+				let { state } = view,
 					progressDecos: Range<Decoration>[] = [];
 
 				// Check if progress bars should be hidden based on settings
@@ -182,100 +193,231 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 						progress: Decoration.none,
 					};
 				}
- 
+
 				for (let part of view.visibleRanges) {
 					let taskBulletCursor: RegExpCursor | SearchCursor;
 					let headingCursor: RegExpCursor | SearchCursor;
 					try {
-						taskBulletCursor = new RegExpCursor(state.doc, "^[\\t|\\s]*([-*+]|\\d+\\.)\\s\\[(.)\\]", {}, part.from, part.to);
+						taskBulletCursor = new RegExpCursor(
+							state.doc,
+							"^[\\t|\\s]*([-*+]|\\d+\\.)\\s\\[(.)\\]",
+							{},
+							part.from,
+							part.to
+						);
 					} catch (err) {
 						console.debug(err);
 						continue;
 					}
+
+					// Process headings if enabled in settings
 					if (plugin?.settings.addTaskProgressBarToHeading) {
 						try {
-							headingCursor = new RegExpCursor(state.doc, "^(#){1,6} ", {}, part.from, part.to);
+							headingCursor = new RegExpCursor(
+								state.doc,
+								"^(#){1,6} ",
+								{},
+								part.from,
+								part.to
+							);
 						} catch (err) {
 							console.debug(err);
 							continue;
 						}
-						// Showing task progress bar near heading items.
-						while (!headingCursor.next().done) {
-							let {from, to} = headingCursor.value;
-							const headingLine = this.view.state.doc.lineAt(from);
-							// @ts-ignore
-							const range = this.calculateRangeForTransform(this.view.state, headingLine.from);
 
-							if (!range) continue;
-							let tasksNum;
-							// @ts-ignore
-							if (this.view.state.doc.slice(range.from, range.to).text === undefined && this.view.state.doc.slice(range.from, range.to).children?.length > 0) {
-								let allChildrenText: string[] = [];
-								// @ts-ignore
-								for (let i = 0; i < this.view.state.doc.slice(range.from, range.to).children?.length; i++) {
-									// @ts-ignore
-									allChildrenText = allChildrenText.concat(this.view.state.doc.slice(range.from, range.to).children[i].text);
-								}
-								tasksNum = this.calculateTasksNum(allChildrenText, false);
-							} else {
-								// @ts-ignore
-								tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, false);
-							}
-							if (tasksNum?.total === 0) continue;
-							let startDeco = Decoration.widget({widget: new TaskProgressBarWidget(app, plugin, view, headingLine.to, headingLine.to, tasksNum.completed, tasksNum.total)});
-							progressDecos.push(startDeco.range(headingLine.to, headingLine.to));
-						}
+						// Process headings
+						this.processHeadings(
+							headingCursor,
+							progressDecos,
+							view
+						);
 					}
-					// Showing task progress bar near bullet items.
-					while (!taskBulletCursor.next().done) {
-						let {from} = taskBulletCursor.value;
-						const linePos = view.state.doc.lineAt(from)?.from;
 
-						// Don't parse any tasks in code blocks or frontmatter
-						// @ts-ignore
-						let syntaxNode = syntaxTree(view.state).resolveInner(linePos + 1),
-							// @ts-ignore
-							nodeProps: string = syntaxNode.type.prop(tokenClassNodeProp),
-							excludedSection = ["hmd-codeblock", "hmd-frontmatter"].find(token =>
-								nodeProps?.split(" ").includes(token)
-							);
-						if (excludedSection) continue;
-						const line = this.view.state.doc.lineAt(linePos);
-
-
-						// @ts-ignore
-						if (!(/^[\s|\t]*([-*+]|\d+\.)\s\[(.)\]/.test(this.view.state.doc.slice(line.from, line.to).text))) return;
-						// @ts-ignore
-						const range = this.calculateRangeForTransform(this.view.state, line.to);
-						if (!range) continue;
-						let tasksNum;
-						// @ts-ignore
-						if ((this.view.state.doc.slice(range.from, range.to).text?.length === 1)) continue;
-						// @ts-ignore
-						if (this.view.state.doc.slice(range.from, range.to).text === undefined && this.view.state.doc.slice(range.from, range.to).children?.length !== undefined) {
-							let allChildrenText: string[] = [];
-							// @ts-ignore
-							for (let i = 0; i < this.view.state.doc.slice(range.from, range.to).children?.length; i++) {
-								// @ts-ignore
-								allChildrenText = allChildrenText.concat(this.view.state.doc.slice(range.from, range.to).children[i].text);
-							}
-							tasksNum = this.calculateTasksNum(allChildrenText, true);
-						} else {
-							// @ts-ignore
-							tasksNum = this.calculateTasksNum(this.view.state.doc.slice(range.from, range.to).text, true);
-						}
-						if (tasksNum.total === 0) continue;
-						let startDeco = Decoration.widget({widget: new TaskProgressBarWidget(app, plugin, view, line.to, line.to, tasksNum.completed, tasksNum.total)});
-						progressDecos.push(startDeco.range(line.to, line.to));
-					}
+					// Process task bullets
+					this.processBullets(taskBulletCursor, progressDecos, view);
 				}
+
 				return {
-					progress: Decoration.set(progressDecos.sort((a, b) => a.from - b.from)),
+					progress: Decoration.set(
+						progressDecos.sort((a, b) => a.from - b.from)
+					),
 				};
 			}
 
+			/**
+			 * Process heading matches and add decorations
+			 */
+			private processHeadings(
+				cursor: RegExpCursor | SearchCursor,
+				decorations: Range<Decoration>[],
+				view: EditorView
+			) {
+				while (!cursor.next().done) {
+					let { from, to } = cursor.value;
+					const headingLine = view.state.doc.lineAt(from);
 
-			public calculateRangeForTransform(state: EditorState, pos: number) {
+					const range = this.calculateRangeForTransform(
+						view.state,
+						headingLine.from
+					);
+
+					if (!range) continue;
+
+					const tasksNum = this.extractTasksFromRange(
+						range,
+						view.state,
+						false
+					);
+
+					if (tasksNum.total === 0) continue;
+
+					let startDeco = Decoration.widget({
+						widget: new TaskProgressBarWidget(
+							app,
+							plugin,
+							view,
+							headingLine.to,
+							headingLine.to,
+							tasksNum.completed,
+							tasksNum.total
+						),
+					});
+
+					decorations.push(
+						startDeco.range(headingLine.to, headingLine.to)
+					);
+				}
+			}
+
+			/**
+			 * Process bullet matches and add decorations
+			 */
+			private processBullets(
+				cursor: RegExpCursor | SearchCursor,
+				decorations: Range<Decoration>[],
+				view: EditorView
+			) {
+				while (!cursor.next().done) {
+					let { from } = cursor.value;
+					const linePos = view.state.doc.lineAt(from)?.from;
+
+					// Don't parse any tasks in code blocks or frontmatter
+					const syntaxNode = syntaxTree(view.state).resolveInner(
+						linePos + 1
+					);
+					const nodeProps = syntaxNode.type.prop(tokenClassNodeProp);
+					const excludedSection = [
+						"hmd-codeblock",
+						"hmd-frontmatter",
+					].find((token) => nodeProps?.split(" ").includes(token));
+
+					if (excludedSection) continue;
+
+					const line = view.state.doc.lineAt(linePos);
+
+					// Check if line is a task
+					const lineText = this.getDocumentText(
+						view.state.doc,
+						line.from,
+						line.to
+					);
+					if (
+						!lineText ||
+						!/^[\s|\t]*([-*+]|\d+\.)\s\[(.)\]/.test(lineText)
+					) {
+						continue;
+					}
+
+					const range = this.calculateRangeForTransform(
+						view.state,
+						line.to
+					);
+
+					if (!range) continue;
+
+					const rangeText = this.getDocumentText(
+						view.state.doc,
+						range.from,
+						range.to
+					);
+					if (!rangeText || rangeText.length === 1) continue;
+
+					const tasksNum = this.extractTasksFromRange(
+						range,
+						view.state,
+						true
+					);
+
+					if (tasksNum.total === 0) continue;
+
+					let startDeco = Decoration.widget({
+						widget: new TaskProgressBarWidget(
+							app,
+							plugin,
+							view,
+							line.to,
+							line.to,
+							tasksNum.completed,
+							tasksNum.total
+						),
+					});
+
+					decorations.push(startDeco.range(line.to, line.to));
+				}
+			}
+
+			/**
+			 * Extract tasks count from a document range
+			 */
+			private extractTasksFromRange(
+				range: TextRange,
+				state: EditorState,
+				isBullet: boolean
+			): Tasks {
+				const textArray = this.getDocumentTextArray(
+					state.doc,
+					range.from,
+					range.to
+				);
+				return this.calculateTasksNum(textArray, isBullet);
+			}
+
+			/**
+			 * Safely extract text from a document range
+			 */
+			private getDocumentText(
+				doc: Text,
+				from: number,
+				to: number
+			): string | null {
+				try {
+					return doc.sliceString(from, to);
+				} catch (e) {
+					console.error("Error getting document text:", e);
+					return null;
+				}
+			}
+
+			/**
+			 * Get an array of text lines from a document range
+			 */
+			private getDocumentTextArray(
+				doc: Text,
+				from: number,
+				to: number
+			): string[] {
+				const text = this.getDocumentText(doc, from, to);
+				if (!text) return [];
+				return text.split("\n");
+			}
+
+			/**
+			 * Calculate the foldable range for a position
+			 */
+			public calculateRangeForTransform(
+				state: EditorState,
+				pos: number
+			): TextRange | null {
 				const line = state.doc.lineAt(pos);
 				const foldRange = foldable(state, line.from, line.to);
 
@@ -283,67 +425,326 @@ export function taskProgressBarExtension(app: App, plugin: TaskProgressBarPlugin
 					return null;
 				}
 
-				return {from: line.from, to: foldRange.to};
+				return { from: line.from, to: foldRange.to };
 			}
 
-			public calculateTasksNum(textArray: string[], bullet: boolean): tasks {
+			/**
+			 * Create regex for counting total tasks
+			 */
+			private createTotalTaskRegex(
+				isHeading: boolean,
+				level: number = 0,
+				tabSize: number = 4
+			): RegExp {
+				// 获取排除的任务标记
+				const excludePattern = plugin?.settings.excludeTaskMarks || "";
+
+				// 构建识别任务标记的正则表达式部分
+				let markPattern = "\\[(.)\\]";
+
+				// 如果存在排除的标记，修改标记匹配模式
+				if (excludePattern && excludePattern.length > 0) {
+					// 构建一个不匹配被排除标记的模式
+					const excludeChars = excludePattern
+						.split("")
+						.map((c) => "\\" + c)
+						.join("");
+					markPattern = `\\[([^${excludeChars}])\\]`;
+				}
+
+				if (isHeading) {
+					return new RegExp(`^([-*+]|\\d+\\.)\\s${markPattern}`);
+				} else {
+					// 如果是子级计数模式，使用更宽松的正则表达式匹配任何缩进级别的任务
+					if (plugin?.settings.countSubLevel) {
+						return new RegExp(
+							`^[\\t|\\s]*?([-*+]|\\d+\\.)\\s${markPattern}`
+						);
+					} else {
+						// 否则使用精确缩进级别匹配
+						return new RegExp(
+							`^[\\t|\\s]{${
+								tabSize * (level + 1)
+							}}([-*+]|\\d+\\.)\\s${markPattern}`
+						);
+					}
+				}
+			}
+
+			/**
+			 * Create regex for matching completed tasks
+			 */
+			private createCompletedTaskRegex(
+				plugin: TaskProgressBarPlugin,
+				isHeading: boolean,
+				level: number = 0,
+				tabSize: number = 4
+			): RegExp {
+				// Extract settings
+				const useOnlyCountMarks = plugin?.settings.useOnlyCountMarks;
+				const onlyCountPattern =
+					plugin?.settings.onlyCountTaskMarks || "x|X";
+				const excludePattern = plugin?.settings.excludeTaskMarks || "";
+				const alternativeMarks = plugin?.settings.alternativeMarks;
+
+				// Default patterns - 对子级计数的情况调整缩进匹配
+				const basePattern = isHeading
+					? "^([-*+]|\\d+\\.)\\s"
+					: plugin?.settings.countSubLevel
+					? "^[\\t|\\s]*?" // 如果是子级计数，使用非贪婪模式匹配任意缩进
+					: "^[\\t|\\s]+";
+
+				const bulletPrefix = isHeading
+					? ""
+					: plugin?.settings.countSubLevel
+					? "([-*+]|\\d+\\.)\\s" // 子级计数时简化前缀
+					: level !== 0
+					? `{${tabSize * (level + 1)}}([-*+]|\\d+\\.)\\s`
+					: "([-*+]|\\d+\\.)\\s";
+
+				// 如果启用了仅统计特定标记功能
+				if (useOnlyCountMarks) {
+					return new RegExp(
+						basePattern +
+							bulletPrefix +
+							"\\[(" +
+							onlyCountPattern +
+							")\\]"
+					);
+				}
+
+				// Handle alternative marks option - 仅在未启用仅统计特定标记时才考虑替代标记
+				if (
+					!useOnlyCountMarks &&
+					plugin?.settings.allowAlternateTaskStatus &&
+					alternativeMarks &&
+					alternativeMarks.length > 0
+				) {
+					if (excludePattern) {
+						// Filter alternative marks based on exclusions
+						const alternativeMarksArray = alternativeMarks
+							.replace(/[()]/g, "")
+							.split("|");
+						const excludeMarksArray = excludePattern.split("");
+						const filteredMarks = alternativeMarksArray
+							.filter((mark) => !excludeMarksArray.includes(mark))
+							.join("|");
+
+						return new RegExp(
+							basePattern +
+								bulletPrefix +
+								"\\[(" +
+								filteredMarks +
+								")\\]"
+						);
+					} else {
+						return new RegExp(
+							basePattern +
+								bulletPrefix +
+								"\\[" +
+								alternativeMarks +
+								"\\]"
+						);
+					}
+				}
+
+				// Handle standard case - 如果没有启用特殊选项
+				if (excludePattern) {
+					return new RegExp(
+						basePattern +
+							bulletPrefix +
+							"\\[[^ " +
+							excludePattern +
+							"]\\]"
+					);
+				} else {
+					return new RegExp(
+						basePattern + bulletPrefix + "\\[[^ ]\\]"
+					);
+				}
+			}
+
+			/**
+			 * Check if a task should be counted as completed
+			 */
+			private isCompletedTask(text: string): boolean {
+				// 如果启用了仅统计特定标记
+				if (plugin?.settings.useOnlyCountMarks) {
+					const onlyCountPattern =
+						plugin?.settings.onlyCountTaskMarks || "x|X";
+					const markMatch = text.match(/\[(.)]/);
+					console.log(markMatch, text);
+					if (markMatch && markMatch[1]) {
+						const mark = markMatch[1];
+						// 检查标记是否在仅统计列表中
+						const onlyCountMarks = onlyCountPattern.split("|");
+						return onlyCountMarks.includes(mark);
+					}
+					return false;
+				}
+
+				// 如果启用了替代标记
+				if (
+					plugin?.settings.allowAlternateTaskStatus &&
+					plugin?.settings.alternativeMarks
+				) {
+					const alternativeMarks = plugin?.settings.alternativeMarks
+						.replace(/[()]/g, "")
+						.split("|");
+					const markMatch = text.match(/\[(.)]/);
+					if (markMatch && markMatch[1]) {
+						const mark = markMatch[1];
+						return alternativeMarks.includes(mark);
+					}
+				}
+
+				// 标准检查 - 非空格的字符
+				const markMatch = text.match(/\[(.)]/);
+				if (markMatch && markMatch[1]) {
+					const mark = markMatch[1];
+					// 排除需要排除的标记
+					if (
+						plugin?.settings.excludeTaskMarks &&
+						plugin.settings.excludeTaskMarks.includes(mark)
+					) {
+						return false;
+					}
+					// 标准完成是非空格
+					return mark !== " ";
+				}
+
+				return false;
+			}
+
+			/**
+			 * Check if a task marker should be excluded from counting
+			 */
+			private shouldExcludeTask(text: string): boolean {
+				// 如果没有排除设置，返回false
+				if (
+					!plugin?.settings.excludeTaskMarks ||
+					plugin.settings.excludeTaskMarks.length === 0
+				) {
+					return false;
+				}
+
+				// 检查任务标记是否在排除列表中
+				const taskMarkMatch = text.match(/\[(.)]/);
+				if (taskMarkMatch && taskMarkMatch[1]) {
+					const taskMark = taskMarkMatch[1];
+					return plugin.settings.excludeTaskMarks.includes(taskMark);
+				}
+
+				return false;
+			}
+
+			/**
+			 * Get tab size from vault configuration
+			 */
+			private getTabSize(): number {
+				try {
+					const vaultConfig = app.vault as any;
+					const useTab =
+						vaultConfig.getConfig?.("useTab") === undefined ||
+						vaultConfig.getConfig?.("useTab") === true;
+					return useTab
+						? (vaultConfig.getConfig?.("tabSize") || 4) / 4
+						: vaultConfig.getConfig?.("tabSize") || 4;
+				} catch (e) {
+					console.error("Error getting tab size:", e);
+					return 4; // Default tab size
+				}
+			}
+
+			public calculateTasksNum(
+				textArray: string[],
+				bullet: boolean
+			): Tasks {
+				if (!textArray || textArray.length === 0) {
+					return { completed: 0, total: 0 };
+				}
+
 				let completed: number = 0;
 				let total: number = 0;
 				let level: number = 0;
-				if (!textArray) return {completed: 0, total: 0};
-				// @ts-ignore
-				const useTab = (app.vault.getConfig("useTab") === undefined || app.vault.getConfig("useTab") === true);
-				// @ts-ignore
-				const tabSize = useTab ? app.vault.getConfig("tabSize") / 4 : app.vault.getConfig("tabSize");
 
-				let bulletCompleteRegex: RegExp = new RegExp(/^[\t|\s]+([-*+]|\d+\.)\s+\[[^ ]\]/);
-				let bulletTotalRegex: RegExp = new RegExp(/^[\t|\s]+([-*+]|\d+\.)\s\[(.)\]/);
-				let headingCompleteRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[[^ ]\\]");
-				let headingTotalRegex: RegExp = new RegExp("([-*+]|\\d+\\.)\\s\\[(.)\\]");
-				if (!plugin?.settings.countSubLevel && bullet) {
-					// @ts-ignore
-					level = textArray[0].match(/^[\s|\t]*/)[0].length / tabSize;
-					// Total regex based on indent level
-					bulletTotalRegex = new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[(.)\\]");
-					bulletCompleteRegex = new RegExp("^[\\t|\\s]{" + (tabSize * (level + 1)) + "}([-*+]|\\d+\\.)\\s\\[[^ ]\\]");
-				}
-				if (plugin?.settings.countSubLevel && !bullet) {
-					level = 0;
-					headingTotalRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[(.)\\]");
-					headingCompleteRegex = new RegExp("^([-*+]|\\d+\\.)\\s\\[[^ ]\\]");
-				}
-				if (plugin?.settings.alternativeMarks.length > 0 && plugin?.settings.allowAlternateTaskStatus) {
-					const lengText = !plugin?.settings.countSubLevel && bullet ? `{${(tabSize * (level + 1))}}` : "";
+				// Get tab size from vault config
+				const tabSize = this.getTabSize();
 
-					bulletCompleteRegex = level !== 0 ? new RegExp("^[\\t|\\s]" + `${lengText}` + "([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]") : (new RegExp("[\\t|\\s]" + `${lengText}` + "([-*+]|\\d+\\.)\\s\\[" + plugin?.settings.alternativeMarks + "\\]"));
-					if (plugin?.settings.addTaskProgressBarToHeading) {
-						headingCompleteRegex = level !== 0 ? new RegExp("^([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]") : new RegExp("([-*+]|\\d+\\.)\\s+\\[" + plugin?.settings.alternativeMarks + "\\]");
+				// Determine indentation level for bullets
+				if (!plugin?.settings.countSubLevel && bullet && textArray[0]) {
+					const indentMatch = textArray[0].match(/^[\s|\t]*/);
+					if (indentMatch) {
+						level = indentMatch[0].length / tabSize;
 					}
 				}
 
+				// Create regexes based on settings and context
+				const bulletTotalRegex = this.createTotalTaskRegex(
+					false,
+					level,
+					tabSize
+				);
+				const bulletCompleteRegex = this.createCompletedTaskRegex(
+					plugin,
+					false,
+					level,
+					tabSize
+				);
+				const headingTotalRegex = this.createTotalTaskRegex(true);
+				const headingCompleteRegex = this.createCompletedTaskRegex(
+					plugin,
+					true
+				);
+
+				// Count tasks
 				for (let i = 0; i < textArray.length; i++) {
-					if (i === 0) {
-						continue;
-					}
-					if (bullet) {
-						if (textArray[i].match(bulletTotalRegex)) total++;
-						if (textArray[i].match(bulletCompleteRegex)) completed++;
-						continue;
-					}
-					if (plugin?.settings.addTaskProgressBarToHeading && !bullet) {
-						if (textArray[i].match(headingTotalRegex)) total++;
-						if (textArray[i].match(headingCompleteRegex)) completed++;
-					}
+					if (i === 0) continue; // Skip the first line
 
+					if (bullet) {
+						// 确保每个任务只被计算一次
+						const lineText = textArray[i].trim();
+						// 首先检查是否匹配任务格式，然后检查是否是应该被排除的任务类型
+						if (
+							lineText &&
+							lineText.match(bulletTotalRegex) &&
+							!this.shouldExcludeTask(lineText)
+						) {
+							total++;
+							// 使用新方法判断是否为已完成任务
+							if (this.isCompletedTask(lineText)) {
+								completed++;
+							}
+						}
+					} else if (plugin?.settings.addTaskProgressBarToHeading) {
+						const lineText = textArray[i].trim();
+						// 同样使用shouldExcludeTask函数进行额外的验证
+						if (
+							lineText &&
+							lineText.match(headingTotalRegex) &&
+							!this.shouldExcludeTask(lineText)
+						) {
+							total++;
+							// 使用新方法判断是否为已完成任务
+							if (this.isCompletedTask(lineText)) {
+								completed++;
+							}
+						}
+					}
 				}
-				return {completed: completed, total: total};
-			};
+
+				// 确保完成数不超过总数
+				completed = Math.min(completed, total);
+
+				return { completed, total };
+			}
 		},
 		{
-			provide: plugin => [
-				// these are separated out so that we can set decoration priority
-				// it's also much easier to sort the decorations when they're grouped
-				EditorView.decorations.of(v => v.plugin(plugin)?.progressDecorations || Decoration.none),
+			provide: (plugin) => [
+				EditorView.decorations.of(
+					(v) =>
+						v.plugin(plugin)?.progressDecorations || Decoration.none
+				),
 			],
 		}
 	);
