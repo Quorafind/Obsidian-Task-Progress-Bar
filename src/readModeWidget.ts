@@ -89,12 +89,17 @@ class ProgressBar extends Component {
 	progressBarEl: HTMLSpanElement;
 	progressBackGroundEl: HTMLDivElement;
 	progressEl: HTMLDivElement;
+	inProgressEl: HTMLDivElement;
+	abandonedEl: HTMLDivElement;
 	numberEl: HTMLDivElement;
 
 	plugin: TaskProgressBarPlugin;
 
 	completed: number;
 	total: number;
+	inProgress: number;
+	abandoned: number;
+	notStarted: number;
 
 	group: GroupElement;
 
@@ -105,13 +110,23 @@ class ProgressBar extends Component {
 	) {
 		super();
 		this.plugin = plugin;
-
 		this.group = group;
-		this.type === "dataview" && this.updateCompletedAndTotalDataview();
-		this.type === "normal" && this.updateCompletedAndTotal();
 
+		this.completed = 0;
+		this.total = 0;
+		this.inProgress = 0;
+		this.abandoned = 0;
+		this.notStarted = 0;
+
+		if (type === "dataview") {
+			this.updateCompletedAndTotalDataview();
+		} else {
+			this.updateCompletedAndTotal();
+		}
+
+		// Set up event handlers
 		for (let el of this.group.childrenElement) {
-			this.type === "normal" &&
+			if (this.type === "normal") {
 				el.on("click", "input", () => {
 					setTimeout(() => {
 						this.updateCompletedAndTotal();
@@ -119,8 +134,7 @@ class ProgressBar extends Component {
 						this.changeNumber();
 					}, 200);
 				});
-
-			this.type === "dataview" &&
+			} else if (this.type === "dataview") {
 				this.registerDomEvent(el, "mousedown", (ev) => {
 					if (!ev.target) return;
 					if ((ev.target as HTMLElement).tagName === "INPUT") {
@@ -131,131 +145,314 @@ class ProgressBar extends Component {
 						}, 200);
 					}
 				});
+			}
 		}
 	}
 
+	getTaskStatus(
+		text: string
+	): "completed" | "inProgress" | "abandoned" | "notStarted" {
+		const markMatch = text.match(/\[(.)]/);
+		if (!markMatch || !markMatch[1]) {
+			return "notStarted";
+		}
+
+		const mark = markMatch[1];
+
+		// Priority 1: If useOnlyCountMarks is enabled
+		if (this.plugin?.settings.useOnlyCountMarks) {
+			const onlyCountMarks =
+				this.plugin?.settings.onlyCountTaskMarks.split("|");
+			if (onlyCountMarks.includes(mark)) {
+				return "completed";
+			} else {
+				// If using onlyCountMarks and the mark is not in the list,
+				// determine which other status it belongs to
+				return this.determineNonCompletedStatus(mark);
+			}
+		}
+
+		// Priority 2: If the mark is in excludeTaskMarks
+		if (
+			this.plugin?.settings.excludeTaskMarks &&
+			this.plugin.settings.excludeTaskMarks.includes(mark)
+		) {
+			// Excluded marks are considered not started
+			return "notStarted";
+		}
+
+		// Priority 3: Check against specific task statuses
+		return this.determineTaskStatus(mark);
+	}
+
+	determineNonCompletedStatus(
+		mark: string
+	): "inProgress" | "abandoned" | "notStarted" {
+		const inProgressMarks =
+			this.plugin?.settings.taskStatuses.inProgress.split("|");
+		if (inProgressMarks.includes(mark)) {
+			return "inProgress";
+		}
+
+		const abandonedMarks =
+			this.plugin?.settings.taskStatuses.abandoned.split("|");
+		if (abandonedMarks.includes(mark)) {
+			return "abandoned";
+		}
+
+		return "notStarted";
+	}
+
+	determineTaskStatus(
+		mark: string
+	): "completed" | "inProgress" | "abandoned" | "notStarted" {
+		const completedMarks =
+			this.plugin?.settings.taskStatuses.completed.split("|");
+		if (completedMarks.includes(mark)) {
+			return "completed";
+		}
+
+		const inProgressMarks =
+			this.plugin?.settings.taskStatuses.inProgress.split("|");
+		if (inProgressMarks.includes(mark)) {
+			return "inProgress";
+		}
+
+		const abandonedMarks =
+			this.plugin?.settings.taskStatuses.abandoned.split("|");
+		if (abandonedMarks.includes(mark)) {
+			return "abandoned";
+		}
+
+		// If not matching any specific status, check if it's a not-started mark
+		const notStartedMarks =
+			this.plugin?.settings.taskStatuses.notStarted.split("|");
+		if (notStartedMarks.includes(mark)) {
+			return "notStarted";
+		}
+
+		// Default fallback - any unrecognized mark is considered not started
+		return "notStarted";
+	}
+
+	isCompletedTask(text: string): boolean {
+		const markMatch = text.match(/\[(.)]/);
+		if (!markMatch || !markMatch[1]) {
+			return false;
+		}
+
+		const mark = markMatch[1];
+
+		// Priority 1: If useOnlyCountMarks is enabled, only count tasks with specified marks
+		if (this.plugin?.settings.useOnlyCountMarks) {
+			const onlyCountMarks =
+				this.plugin?.settings.onlyCountTaskMarks.split("|");
+			return onlyCountMarks.includes(mark);
+		}
+
+		// Priority 2: If the mark is in excludeTaskMarks, don't count it
+		if (
+			this.plugin?.settings.excludeTaskMarks &&
+			this.plugin.settings.excludeTaskMarks.includes(mark)
+		) {
+			return false;
+		}
+
+		// Priority 3: Check against the task statuses
+		// We consider a task "completed" if it has a mark from the "completed" status
+		const completedMarks =
+			this.plugin?.settings.taskStatuses.completed.split("|");
+
+		// Return true if the mark is in the completedMarks array
+		return completedMarks.includes(mark);
+	}
+
 	updateCompletedAndTotalDataview() {
-		// Get all task elements
-		const allTasks = this.group.childrenElement;
-		let checked = 0;
+		let completed = 0;
+		let inProgress = 0;
+		let abandoned = 0;
+		let notStarted = 0;
 		let total = 0;
 
-		// Get settings for task markers
-		const excludeMarks = this.plugin?.settings.excludeTaskMarks
-			? this.plugin.settings.excludeTaskMarks.split("")
-			: [];
-		const onlyCountMarks = this.plugin?.settings.onlyCountTaskMarks
-			? this.plugin.settings.onlyCountTaskMarks.split("|")
-			: ["x", "X"];
-		const useOnlyCountMarks = this.plugin?.settings.useOnlyCountMarks;
+		for (let element of this.group.childrenElement) {
+			const checkboxElement = element.querySelector(
+				".task-list-item-checkbox"
+			);
+			if (!checkboxElement) continue;
 
-		// Process each task element
-		for (const el of allTasks) {
-			const taskMark = el.getAttribute("data-task");
+			// For dataview, we need to check the text content
+			const textContent = element.textContent?.trim() || "";
 
-			// Skip if no task mark
-			if (!taskMark) continue;
+			total++;
 
-			// Count total tasks (excluding specified markers)
-			if (taskMark !== " " && !excludeMarks.includes(taskMark)) {
-				total++;
-			}
+			// Extract the task mark
+			const markMatch = textContent.match(/\[(.)]/);
+			if (markMatch && markMatch[1]) {
+				const status = this.getTaskStatus(textContent);
 
-			// Count completed tasks based on settings
-			if (useOnlyCountMarks) {
-				// Only count specific markers
-				if (onlyCountMarks.includes(taskMark)) {
-					checked++;
+				// Count based on status
+				if (this.isCompletedTask(textContent)) {
+					completed++;
+				} else if (status === "inProgress") {
+					inProgress++;
+				} else if (status === "abandoned") {
+					abandoned++;
+				} else if (status === "notStarted") {
+					notStarted++;
 				}
 			} else {
-				// Count all non-space markers (excluding specified markers)
-				if (taskMark !== " " && !excludeMarks.includes(taskMark)) {
-					checked++;
+				// Fallback to checking if the checkbox is checked
+				const checkbox = checkboxElement as HTMLInputElement;
+				if (checkbox.checked) {
+					completed++;
+				} else {
+					notStarted++;
 				}
 			}
 		}
 
-		this.numberEl?.detach();
-
-		this.completed = checked;
+		this.completed = completed;
+		this.inProgress = inProgress;
+		this.abandoned = abandoned;
+		this.notStarted = notStarted;
 		this.total = total;
 	}
 
 	updateCompletedAndTotal() {
-		// Get all task elements
-		const allTasks = this.group.childrenElement;
-		let checked = 0;
-		let total = allTasks.length;
+		let completed = 0;
+		let inProgress = 0;
+		let abandoned = 0;
+		let notStarted = 0;
+		let total = 0;
 
-		// Get settings for task markers
-		const excludeMarks = this.plugin?.settings.excludeTaskMarks
-			? this.plugin.settings.excludeTaskMarks.split("")
-			: [];
-		const onlyCountMarks = this.plugin?.settings.onlyCountTaskMarks
-			? this.plugin.settings.onlyCountTaskMarks.split("|")
-			: ["x", "X"];
-		const useOnlyCountMarks = this.plugin?.settings.useOnlyCountMarks;
+		for (let element of this.group.childrenElement) {
+			const checkboxElement = element.querySelector(
+				".task-list-item-checkbox"
+			);
+			if (!checkboxElement) continue;
 
-		// In normal mode, we can only distinguish between checked and unchecked
-		// So we'll only implement the "only count specific markers" feature
-		// The exclude feature is not applicable here since we can't determine the specific marker
+			const checkbox = checkboxElement as HTMLInputElement;
+			const textContent = element.textContent?.trim() || "";
 
-		if (useOnlyCountMarks) {
-			// For "only count specific markers" we need to check if the default checkbox is checked
-			// This is a limitation since we can't determine the specific marker in normal mode
-			checked = allTasks.filter((el) => el.hasClass("is-checked")).length;
-		} else {
-			checked = allTasks.filter((el) => el.hasClass("is-checked")).length;
+			// Extract the task mark
+			const markMatch = textContent.match(/\[(.)]/);
+
+			total++;
+
+			if (markMatch && markMatch[1]) {
+				const status = this.getTaskStatus(textContent);
+
+				// Count based on status
+				if (this.isCompletedTask(textContent)) {
+					completed++;
+				} else if (status === "inProgress") {
+					inProgress++;
+				} else if (status === "abandoned") {
+					abandoned++;
+				} else if (status === "notStarted") {
+					notStarted++;
+				}
+			} else if (checkbox.checked) {
+				completed++;
+			}
 		}
 
-		this.numberEl?.detach();
-
-		this.completed = checked;
+		this.completed = completed;
+		this.inProgress = inProgress;
+		this.abandoned = abandoned;
+		this.notStarted = notStarted;
 		this.total = total;
 	}
 
 	changePercentage() {
-		const percentage =
+		if (this.total === 0) return;
+
+		const completedPercentage =
 			Math.round((this.completed / this.total) * 10000) / 100;
-		this.progressEl.style.width = percentage + "%";
+		const inProgressPercentage =
+			Math.round((this.inProgress / this.total) * 10000) / 100;
+		const abandonedPercentage =
+			Math.round((this.abandoned / this.total) * 10000) / 100;
+
+		// Set the completed part
+		this.progressEl.style.width = completedPercentage + "%";
+
+		// Set the in-progress part (if it exists)
+		if (this.inProgressEl) {
+			this.inProgressEl.style.width = inProgressPercentage + "%";
+			this.inProgressEl.style.left = completedPercentage + "%";
+		}
+
+		// Set the abandoned part (if it exists)
+		if (this.abandonedEl) {
+			this.abandonedEl.style.width = abandonedPercentage + "%";
+			this.abandonedEl.style.left =
+				completedPercentage + inProgressPercentage + "%";
+		}
+
+		// Update the class based on progress percentage
+		let progressClass = "progress-bar-inline";
+
 		switch (true) {
-			case percentage >= 0 && percentage < 25:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-0";
+			case completedPercentage === 0:
+				progressClass += " progress-bar-inline-empty";
 				break;
-			case percentage >= 25 && percentage < 50:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-1";
+			case completedPercentage > 0 && completedPercentage < 25:
+				progressClass += " progress-bar-inline-0";
 				break;
-			case percentage >= 50 && percentage < 75:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-2";
+			case completedPercentage >= 25 && completedPercentage < 50:
+				progressClass += " progress-bar-inline-1";
 				break;
-			case percentage >= 75 && percentage < 100:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-3";
+			case completedPercentage >= 50 && completedPercentage < 75:
+				progressClass += " progress-bar-inline-2";
 				break;
-			case percentage >= 100:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-4";
+			case completedPercentage >= 75 && completedPercentage < 100:
+				progressClass += " progress-bar-inline-3";
+				break;
+			case completedPercentage >= 100:
+				progressClass += " progress-bar-inline-complete";
 				break;
 		}
+
+		// Add classes for special states
+		if (inProgressPercentage > 0) {
+			progressClass += " has-in-progress";
+		}
+		if (abandonedPercentage > 0) {
+			progressClass += " has-abandoned";
+		}
+
+		this.progressEl.className = progressClass;
 	}
 
 	changeNumber() {
 		if (this.plugin?.settings.addNumberToProgressBar) {
-			const text = this.plugin?.settings.showPercentage
-				? `${Math.round((this.completed / this.total) * 10000) / 100}%`
-				: `[${this.completed}/${this.total}]`;
+			let text;
+			if (this.plugin?.settings.showPercentage) {
+				// Calculate percentage of completed tasks
+				const percentage =
+					Math.round((this.completed / this.total) * 10000) / 100;
+				text = `${percentage}%`;
+			} else {
+				// Show detailed counts if we have in-progress or abandoned tasks
+				if (this.inProgress > 0 || this.abandoned > 0) {
+					text = `[${this.completed}✓ ${this.inProgress}⟳ ${this.abandoned}✗ / ${this.total}]`;
+				} else {
+					text = `[${this.completed}/${this.total}]`;
+				}
+			}
 
-			this.numberEl = this.progressBarEl.createEl("div", {
-				cls: "progress-status",
-				text: text,
-			});
-
-			return;
+			if (!this.numberEl) {
+				this.numberEl = this.progressBarEl.createEl("div", {
+					cls: "progress-status",
+					text: text,
+				});
+			} else {
+				this.numberEl.innerText = text;
+			}
+		} else if (this.numberEl) {
+			this.numberEl.innerText = `[${this.completed}/${this.total}]`;
 		}
-		this.numberEl.innerText = `[${this.completed}/${this.total}]`;
 	}
 
 	onload() {
@@ -267,12 +464,39 @@ class ProgressBar extends Component {
 		this.progressBackGroundEl = this.progressBarEl.createEl("div", {
 			cls: "progress-bar-inline-background",
 		});
-		this.progressEl = this.progressBackGroundEl.createEl("div");
+
+		// Create elements for each status type
+		this.progressEl = this.progressBackGroundEl.createEl("div", {
+			cls: "progress-bar-inline progress-completed",
+		});
+
+		// Only create these elements if we have tasks of these types
+		if (this.inProgress > 0) {
+			this.inProgressEl = this.progressBackGroundEl.createEl("div", {
+				cls: "progress-bar-inline progress-in-progress",
+			});
+		}
+
+		if (this.abandoned > 0) {
+			this.abandonedEl = this.progressBackGroundEl.createEl("div", {
+				cls: "progress-bar-inline progress-abandoned",
+			});
+		}
 
 		if (this.plugin?.settings.addNumberToProgressBar && this.total) {
-			const text = this.plugin?.settings.showPercentage
-				? `${Math.round((this.completed / this.total) * 10000) / 100}%`
-				: `[${this.completed}/${this.total}]`;
+			let text;
+			if (this.plugin?.settings.showPercentage) {
+				const percentage =
+					Math.round((this.completed / this.total) * 10000) / 100;
+				text = `${percentage}%`;
+			} else {
+				// Show detailed counts if we have in-progress or abandoned tasks
+				if (this.inProgress > 0 || this.abandoned > 0) {
+					text = `[${this.completed}✓ ${this.inProgress}⟳ ${this.abandoned}✗ / ${this.total}]`;
+				} else {
+					text = `[${this.completed}/${this.total}]`;
+				}
+			}
 
 			this.numberEl = this.progressBarEl.createEl("div", {
 				cls: "progress-status",

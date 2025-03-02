@@ -1,38 +1,60 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, Modal } from "obsidian";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import { allStatusCollections } from "./task-status";
 
 export interface TaskProgressBarSettings {
 	addTaskProgressBarToHeading: boolean;
 	addNumberToProgressBar: boolean;
 	showPercentage: boolean;
-	allowAlternateTaskStatus: boolean;
-	alternativeMarks: string;
 	countSubLevel: boolean;
 	hideProgressBarBasedOnConditions: boolean;
 	hideProgressBarTags: string;
 	hideProgressBarFolders: string;
 	hideProgressBarMetadata: string;
+
+	// Task state settings
+	taskStatuses: {
+		completed: string;
+		inProgress: string;
+		abandoned: string;
+		notStarted: string;
+		planned: string;
+	};
+
+	countOtherStatusesAs: string;
+
+	// Control which tasks to count
 	excludeTaskMarks: string;
-	onlyCountTaskMarks: string;
 	useOnlyCountMarks: boolean;
+	onlyCountTaskMarks: string;
 }
 
 export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	addTaskProgressBarToHeading: false,
 	addNumberToProgressBar: false,
 	showPercentage: false,
-	allowAlternateTaskStatus: false,
-	alternativeMarks: "(x|X|-)",
 	countSubLevel: true,
 	hideProgressBarBasedOnConditions: false,
 	hideProgressBarTags: "no-progress-bar",
 	hideProgressBarFolders: "",
 	hideProgressBarMetadata: "hide-progress-bar",
+
+	// Default task statuses
+	taskStatuses: {
+		completed: "x|X",
+		inProgress: ">|/",
+		abandoned: "-",
+		notStarted: " ",
+		planned: "?",
+	},
+
+	countOtherStatusesAs: "notStarted",
+
+	// Control which tasks to count
 	excludeTaskMarks: "",
 	onlyCountTaskMarks: "x|X",
 	useOnlyCountMarks: false,
 };
-
 
 export class TaskProgressBarSettingTab extends PluginSettingTab {
 	plugin: TaskProgressBarPlugin;
@@ -87,43 +109,203 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Task Status Settings
 		new Setting(containerEl)
-			.setName("Allow alternate task status")
+			.setName("Task Status Settings")
 			.setDesc(
-				"Toggle this to allow this plugin to treat different tasks mark as completed or uncompleted tasks."
+				"Select a predefined task status collection or customize your own"
 			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.allowAlternateTaskStatus)
-					.onChange(async (value) => {
-						this.plugin.settings.allowAlternateTaskStatus = value;
-						this.applySettingsUpdate();
+			.setHeading()
+			.addDropdown((dropdown) => {
+				dropdown.addOption("custom", "Custom");
+				for (const statusCollection of allStatusCollections) {
+					dropdown.addOption(statusCollection, statusCollection);
+				}
 
-						setTimeout(() => {
-							this.display();
-						}, 200);
+				// Set default value to custom
+				dropdown.setValue("custom");
+
+				dropdown.onChange(async (value) => {
+					if (value === "custom") {
+						return;
+					}
+
+					// Confirm before applying the theme
+					const modal = new Modal(this.app);
+					modal.titleEl.setText(`Apply ${value} Theme?`);
+
+					const content = modal.contentEl.createDiv();
+					content.setText(
+						`This will override your current task status settings with the ${value} theme. Do you want to continue?`
+					);
+
+					const buttonContainer = modal.contentEl.createDiv();
+					buttonContainer.addClass("modal-button-container");
+
+					const cancelButton = buttonContainer.createEl("button");
+					cancelButton.setText("Cancel");
+					cancelButton.addEventListener("click", () => {
+						dropdown.setValue("custom");
+						modal.close();
+					});
+
+					const confirmButton = buttonContainer.createEl("button");
+					confirmButton.setText("Apply Theme");
+					confirmButton.addClass("mod-cta");
+					confirmButton.addEventListener("click", async () => {
+						modal.close();
+
+						// Apply the selected theme's task statuses
+						try {
+							// Import the function dynamically based on the selected theme
+							const functionName =
+								value.toLowerCase() + "SupportedStatuses";
+							const statusesModule = await import(
+								"./task-status"
+							);
+
+							// Use type assertion for the dynamic function access
+							const getStatuses = (statusesModule as any)[
+								functionName
+							];
+
+							if (typeof getStatuses === "function") {
+								const statuses = getStatuses();
+
+								// Create a map to collect all statuses of each type
+								const statusMap: Record<string, string[]> = {
+									completed: [],
+									inProgress: [],
+									abandoned: [],
+									notStarted: [],
+									planned: [],
+								};
+
+								// Group statuses by their type
+								for (const [symbol, _, type] of statuses) {
+									if (type in statusMap) {
+										statusMap[
+											type as keyof typeof statusMap
+										].push(symbol);
+									}
+								}
+
+								// Update the settings with the collected statuses
+								for (const type of Object.keys(
+									this.plugin.settings.taskStatuses
+								)) {
+									if (
+										statusMap[type] &&
+										statusMap[type].length > 0
+									) {
+										(
+											this.plugin.settings
+												.taskStatuses as Record<
+												string,
+												string
+											>
+										)[type] = statusMap[type].join("|");
+									}
+								}
+
+								// Save settings and refresh the display
+								this.applySettingsUpdate();
+								this.display();
+							}
+						} catch (error) {
+							console.error(
+								"Failed to apply task status theme:",
+								error
+							);
+						}
+					});
+
+					modal.open();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Completed task markers")
+			.setDesc(
+				'Characters in square brackets that represent completed tasks. Example: "x|X"'
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.taskStatuses.completed)
+					.setValue(this.plugin.settings.taskStatuses.completed)
+					.onChange(async (value) => {
+						this.plugin.settings.taskStatuses.completed =
+							value || DEFAULT_SETTINGS.taskStatuses.completed;
+						this.applySettingsUpdate();
 					})
 			);
 
-		if (this.plugin.settings.allowAlternateTaskStatus) {
-			new Setting(containerEl)
-				.setName("Completed alternative marks")
-				.setDesc('Set completed alternative marks here. Like "x|X|-"')
-				.addText((text) =>
-					text
-						.setPlaceholder(DEFAULT_SETTINGS.alternativeMarks)
-						.setValue(this.plugin.settings.alternativeMarks)
-						.onChange(async (value) => {
-							if (value.length === 0) {
-								this.plugin.settings.alternativeMarks =
-									DEFAULT_SETTINGS.alternativeMarks;
-							} else {
-								this.plugin.settings.alternativeMarks = value;
-							}
-							this.applySettingsUpdate();
-						})
-				);
-		}
+		new Setting(containerEl)
+			.setName("In progress task markers")
+			.setDesc(
+				'Characters in square brackets that represent tasks in progress. Example: ">|/"'
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.taskStatuses.inProgress)
+					.setValue(this.plugin.settings.taskStatuses.inProgress)
+					.onChange(async (value) => {
+						this.plugin.settings.taskStatuses.inProgress =
+							value || DEFAULT_SETTINGS.taskStatuses.inProgress;
+						this.applySettingsUpdate();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Abandoned task markers")
+			.setDesc(
+				'Characters in square brackets that represent abandoned tasks. Example: "-"'
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.taskStatuses.abandoned)
+					.setValue(this.plugin.settings.taskStatuses.abandoned)
+					.onChange(async (value) => {
+						this.plugin.settings.taskStatuses.abandoned =
+							value || DEFAULT_SETTINGS.taskStatuses.abandoned;
+						this.applySettingsUpdate();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Not started task markers")
+			.setDesc(
+				'Characters in square brackets that represent not started tasks. Default is space " "'
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.taskStatuses.notStarted)
+					.setValue(this.plugin.settings.taskStatuses.notStarted)
+					.onChange(async (value) => {
+						this.plugin.settings.taskStatuses.notStarted =
+							value || DEFAULT_SETTINGS.taskStatuses.notStarted;
+						this.applySettingsUpdate();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Count other statuses as")
+			.setDesc(
+				'Select the status to count other statuses as. Default is "Not Started".'
+			)
+			.addDropdown((dropdown) => {
+				dropdown.addOption("notStarted", "Not Started");
+				dropdown.addOption("abandoned", "Abandoned");
+				dropdown.addOption("planned", "Planned");
+				dropdown.addOption("completed", "Completed");
+				dropdown.addOption("inProgress", "In Progress");
+			});
+
+		// Task Counting Settings
+		new Setting(containerEl)
+			.setName("Task Counting Settings")
+			.setDesc("Toggle this to allow this plugin to count sub tasks.")
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName("Exclude specific task markers")

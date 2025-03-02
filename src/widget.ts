@@ -12,12 +12,18 @@ import { EditorState, Range, Text } from "@codemirror/state";
 // @ts-ignore - This import is necessary but TypeScript can't find it
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { RegExpCursor } from "./regexp-cursor";
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin, {
+	showPopoverWithProgressBar,
+} from "./taskProgressBarIndex";
 import { shouldHideProgressBarInLivePriview } from "./utils";
 
 interface Tasks {
 	completed: number;
 	total: number;
+	inProgress?: number;
+	abandoned?: number;
+	notStarted?: number;
+	planned?: number;
 }
 
 // Type to represent a text range for safe access
@@ -26,10 +32,17 @@ interface TextRange {
 	to: number;
 }
 
+export interface HTMLElementWithView extends HTMLElement {
+	view: EditorView;
+}
+
 class TaskProgressBarWidget extends WidgetType {
 	progressBarEl: HTMLSpanElement;
 	progressBackGroundEl: HTMLDivElement;
 	progressEl: HTMLDivElement;
+	inProgressEl: HTMLDivElement;
+	abandonedEl: HTMLDivElement;
+	plannedEl: HTMLDivElement;
 	numberEl: HTMLDivElement;
 
 	constructor(
@@ -39,68 +52,135 @@ class TaskProgressBarWidget extends WidgetType {
 		readonly from: number,
 		readonly to: number,
 		readonly completed: number,
-		readonly total: number
+		readonly total: number,
+		readonly inProgress: number = 0,
+		readonly abandoned: number = 0,
+		readonly notStarted: number = 0,
+		readonly planned: number = 0
 	) {
 		super();
 	}
 
 	eq(other: TaskProgressBarWidget) {
-		const markdownView = app.workspace.getActiveViewOfType(MarkdownView);
-		if (!markdownView) {
-			return false;
-		}
-		if (this.completed === other.completed && this.total === other.total) {
-			return true;
-		}
-		const editor = markdownView.editor;
-		const offset = editor.offsetToPos(this.from);
-		const originalOffset = editor.offsetToPos(other.from);
-		if (this.completed !== other.completed || this.total !== other.total) {
-			return false;
-		}
 		if (
-			offset.line === originalOffset.line &&
+			this.from === other.from &&
+			this.to === other.to &&
+			this.inProgress === other.inProgress &&
+			this.abandoned === other.abandoned &&
+			this.notStarted === other.notStarted &&
+			this.planned === other.planned &&
 			this.completed === other.completed &&
 			this.total === other.total
 		) {
 			return true;
 		}
-		return other.completed === this.completed && other.total === this.total;
+		return (
+			other.completed === this.completed &&
+			other.total === this.total &&
+			other.inProgress === this.inProgress &&
+			other.abandoned === this.abandoned &&
+			other.notStarted === this.notStarted &&
+			other.planned === this.planned
+		);
 	}
 
 	changePercentage() {
-		const percentage =
+		if (this.total === 0) return;
+
+		const completedPercentage =
 			Math.round((this.completed / this.total) * 10000) / 100;
-		this.progressEl.style.width = percentage + "%";
+		const inProgressPercentage =
+			Math.round((this.inProgress / this.total) * 10000) / 100;
+		const abandonedPercentage =
+			Math.round((this.abandoned / this.total) * 10000) / 100;
+		const plannedPercentage =
+			Math.round((this.planned / this.total) * 10000) / 100;
+
+		// Set the completed part
+		this.progressEl.style.width = completedPercentage + "%";
+
+		// Set the in-progress part (if it exists)
+		if (this.inProgressEl) {
+			this.inProgressEl.style.width = inProgressPercentage + "%";
+			this.inProgressEl.style.left = completedPercentage + "%";
+		}
+
+		// Set the abandoned part (if it exists)
+		if (this.abandonedEl) {
+			this.abandonedEl.style.width = abandonedPercentage + "%";
+			this.abandonedEl.style.left =
+				completedPercentage + inProgressPercentage + "%";
+		}
+
+		// Set the planned part (if it exists)
+		if (this.plannedEl) {
+			this.plannedEl.style.width = plannedPercentage + "%";
+			this.plannedEl.style.left =
+				completedPercentage +
+				inProgressPercentage +
+				abandonedPercentage +
+				"%";
+		}
+
+		// Update the class based on progress percentage
+		// This allows for CSS styling based on progress level
+		let progressClass = "progress-bar-inline";
+
 		switch (true) {
-			case percentage >= 0 && percentage < 25:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-0";
+			case completedPercentage === 0:
+				progressClass += " progress-bar-inline-empty";
 				break;
-			case percentage >= 25 && percentage < 50:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-1";
+			case completedPercentage > 0 && completedPercentage < 25:
+				progressClass += " progress-bar-inline-0";
 				break;
-			case percentage >= 50 && percentage < 75:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-2";
+			case completedPercentage >= 25 && completedPercentage < 50:
+				progressClass += " progress-bar-inline-1";
 				break;
-			case percentage >= 75 && percentage < 100:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-3";
+			case completedPercentage >= 50 && completedPercentage < 75:
+				progressClass += " progress-bar-inline-2";
 				break;
-			case percentage >= 100:
-				this.progressEl.className =
-					"progress-bar-inline progress-bar-inline-4";
+			case completedPercentage >= 75 && completedPercentage < 100:
+				progressClass += " progress-bar-inline-3";
+				break;
+			case completedPercentage >= 100:
+				progressClass += " progress-bar-inline-complete";
 				break;
 		}
+
+		// Add classes for special states
+		if (inProgressPercentage > 0) {
+			progressClass += " has-in-progress";
+		}
+		if (abandonedPercentage > 0) {
+			progressClass += " has-abandoned";
+		}
+		if (plannedPercentage > 0) {
+			progressClass += " has-planned";
+		}
+
+		this.progressEl.className = progressClass;
 	}
 
 	changeNumber() {
 		if (this.plugin?.settings.addNumberToProgressBar) {
-			const text = this.plugin?.settings.showPercentage
-				? `${Math.round((this.completed / this.total) * 10000) / 100}%`
-				: `[${this.completed}/${this.total}]`;
+			let text;
+			if (this.plugin?.settings.showPercentage) {
+				// Calculate percentage of completed tasks
+				const percentage =
+					Math.round((this.completed / this.total) * 10000) / 100;
+				text = `${percentage}%`;
+			} else {
+				// Show detailed counts if we have in-progress, abandoned, or planned tasks
+				if (
+					this.inProgress > 0 ||
+					this.abandoned > 0 ||
+					this.planned > 0
+				) {
+					text = `[${this.completed}✓ ${this.inProgress}⟳ ${this.abandoned}✗ ${this.planned}? / ${this.total}]`;
+				} else {
+					text = `[${this.completed}/${this.total}]`;
+				}
+			}
 
 			if (!this.numberEl) {
 				this.numberEl = this.progressBarEl.createEl("div", {
@@ -109,10 +189,8 @@ class TaskProgressBarWidget extends WidgetType {
 				});
 			} else {
 				this.numberEl.innerText = text;
-				return;
 			}
-		}
-		if (this.numberEl) {
+		} else if (this.numberEl) {
 			this.numberEl.innerText = `[${this.completed}/${this.total}]`;
 		}
 	}
@@ -121,8 +199,9 @@ class TaskProgressBarWidget extends WidgetType {
 		if (
 			!this.plugin?.settings.addNumberToProgressBar &&
 			this.numberEl !== undefined
-		)
+		) {
 			this.numberEl.detach();
+		}
 
 		if (this.progressBarEl !== undefined) {
 			this.changePercentage();
@@ -133,17 +212,73 @@ class TaskProgressBarWidget extends WidgetType {
 		this.progressBarEl = createSpan(
 			this.plugin?.settings.addNumberToProgressBar
 				? "cm-task-progress-bar with-number"
-				: "cm-task-progress-bar"
+				: "cm-task-progress-bar",
+			(el) => {
+				el.dataset.completed = this.completed.toString();
+				el.dataset.total = this.total.toString();
+				el.dataset.inProgress = this.inProgress.toString();
+				el.dataset.abandoned = this.abandoned.toString();
+				el.dataset.notStarted = this.notStarted.toString();
+				el.dataset.planned = this.planned.toString();
+
+				el.onmouseover = () => {
+					showPopoverWithProgressBar(this.plugin, {
+						progressBar: el,
+						data: {
+							completed: this.completed.toString(),
+							total: this.total.toString(),
+							inProgress: this.inProgress.toString(),
+							abandoned: this.abandoned.toString(),
+							notStarted: this.notStarted.toString(),
+							planned: this.planned.toString(),
+						},
+						view: this.view,
+					});
+				};
+			}
 		);
 		this.progressBackGroundEl = this.progressBarEl.createEl("div", {
 			cls: "progress-bar-inline-background",
 		});
-		this.progressEl = this.progressBackGroundEl.createEl("div");
+
+		// Create elements for each status type
+		this.progressEl = this.progressBackGroundEl.createEl("div", {
+			cls: "progress-bar-inline progress-completed",
+		});
+
+		// Only create these elements if we have tasks of these types
+		if (this.inProgress > 0) {
+			this.inProgressEl = this.progressBackGroundEl.createEl("div", {
+				cls: "progress-bar-inline progress-in-progress",
+			});
+		}
+
+		if (this.abandoned > 0) {
+			this.abandonedEl = this.progressBackGroundEl.createEl("div", {
+				cls: "progress-bar-inline progress-abandoned",
+			});
+		}
+
+		if (this.planned > 0) {
+			this.plannedEl = this.progressBackGroundEl.createEl("div", {
+				cls: "progress-bar-inline progress-planned",
+			});
+		}
 
 		if (this.plugin?.settings.addNumberToProgressBar && this.total) {
-			const text = this.plugin?.settings.showPercentage
-				? `${Math.round((this.completed / this.total) * 10000) / 100}%`
-				: `[${this.completed}/${this.total}]`;
+			let text;
+			if (this.plugin?.settings.showPercentage) {
+				const percentage =
+					Math.round((this.completed / this.total) * 10000) / 100;
+				text = `${percentage}%`;
+			} else {
+				// Show detailed counts if we have in-progress or abandoned tasks
+				if (this.inProgress > 0 || this.abandoned > 0) {
+					text = `[${this.completed}✓ ${this.inProgress}⟳ ${this.abandoned}✗ / ${this.total}]`;
+				} else {
+					text = `[${this.completed}/${this.total}]`;
+				}
+			}
 
 			this.numberEl = this.progressBarEl.createEl("div", {
 				cls: "progress-status",
@@ -279,7 +414,11 @@ export function taskProgressBarExtension(
 							headingLine.to,
 							headingLine.to,
 							tasksNum.completed,
-							tasksNum.total
+							tasksNum.total,
+							tasksNum.inProgress || 0,
+							tasksNum.abandoned || 0,
+							tasksNum.notStarted || 0,
+							tasksNum.planned || 0
 						),
 					});
 
@@ -358,7 +497,11 @@ export function taskProgressBarExtension(
 							line.to,
 							line.to,
 							tasksNum.completed,
-							tasksNum.total
+							tasksNum.total,
+							tasksNum.inProgress || 0,
+							tasksNum.abandoned || 0,
+							tasksNum.notStarted || 0,
+							tasksNum.planned || 0
 						),
 					});
 
@@ -436,15 +579,48 @@ export function taskProgressBarExtension(
 				level: number = 0,
 				tabSize: number = 4
 			): RegExp {
-				// 获取排除的任务标记
+				// Check if we're using only specific marks for counting
+				if (plugin?.settings.useOnlyCountMarks) {
+					const onlyCountMarks =
+						plugin?.settings.onlyCountTaskMarks || "";
+					// If onlyCountMarks is empty, return a regex that won't match anything
+					if (!onlyCountMarks.trim()) {
+						return new RegExp("^$"); // This won't match any tasks
+					}
+
+					// Include the specified marks and space (for not started tasks)
+					const markPattern = `\\[([ ${onlyCountMarks}])\\]`;
+
+					if (isHeading) {
+						// For headings, we'll still match any task format, but filter by indentation level later
+						return new RegExp(
+							`^[\\t|\\s]*([-*+]|\\d+\\.)\\s${markPattern}`
+						);
+					} else {
+						// If counting sublevels, use a more relaxed regex that matches any indentation
+						if (plugin?.settings.countSubLevel) {
+							return new RegExp(
+								`^[\\t|\\s]*?([-*+]|\\d+\\.)\\s${markPattern}`
+							);
+						} else {
+							// When not counting sublevels, we'll check the actual indentation level separately
+							// So the regex should match tasks at any indentation level
+							return new RegExp(
+								`^[\\t|\\s]*([-*+]|\\d+\\.)\\s${markPattern}`
+							);
+						}
+					}
+				}
+
+				// Get excluded task marks
 				const excludePattern = plugin?.settings.excludeTaskMarks || "";
 
-				// 构建识别任务标记的正则表达式部分
+				// Build the task marker pattern
 				let markPattern = "\\[(.)\\]";
 
-				// 如果存在排除的标记，修改标记匹配模式
+				// If there are excluded marks, modify the pattern
 				if (excludePattern && excludePattern.length > 0) {
-					// 构建一个不匹配被排除标记的模式
+					// Build a pattern that doesn't match excluded marks
 					const excludeChars = excludePattern
 						.split("")
 						.map((c) => "\\" + c)
@@ -453,19 +629,21 @@ export function taskProgressBarExtension(
 				}
 
 				if (isHeading) {
-					return new RegExp(`^([-*+]|\\d+\\.)\\s${markPattern}`);
+					// For headings, we'll still match any task format, but filter by indentation level later
+					return new RegExp(
+						`^[\\t|\\s]*([-*+]|\\d+\\.)\\s${markPattern}`
+					);
 				} else {
-					// 如果是子级计数模式，使用更宽松的正则表达式匹配任何缩进级别的任务
+					// If counting sublevels, use a more relaxed regex
 					if (plugin?.settings.countSubLevel) {
 						return new RegExp(
 							`^[\\t|\\s]*?([-*+]|\\d+\\.)\\s${markPattern}`
 						);
 					} else {
-						// 否则使用精确缩进级别匹配
+						// When not counting sublevels, we'll check the actual indentation level separately
+						// So the regex should match tasks at any indentation level
 						return new RegExp(
-							`^[\\t|\\s]{${
-								tabSize * (level + 1)
-							}}([-*+]|\\d+\\.)\\s${markPattern}`
+							`^[\\t|\\s]*([-*+]|\\d+\\.)\\s${markPattern}`
 						);
 					}
 				}
@@ -484,25 +662,30 @@ export function taskProgressBarExtension(
 				const useOnlyCountMarks = plugin?.settings.useOnlyCountMarks;
 				const onlyCountPattern =
 					plugin?.settings.onlyCountTaskMarks || "x|X";
-				const excludePattern = plugin?.settings.excludeTaskMarks || "";
-				const alternativeMarks = plugin?.settings.alternativeMarks;
 
-				// Default patterns - 对子级计数的情况调整缩进匹配
+				// If onlyCountMarks is enabled but the pattern is empty, return a regex that won't match anything
+				if (useOnlyCountMarks && !onlyCountPattern.trim()) {
+					return new RegExp("^$"); // This won't match any tasks
+				}
+
+				const excludePattern = plugin?.settings.excludeTaskMarks || "";
+				const completedMarks =
+					plugin?.settings.taskStatuses?.completed || "x|X";
+
+				// Default patterns - adjust for sublevel counting
 				const basePattern = isHeading
-					? "^([-*+]|\\d+\\.)\\s"
+					? "^[\\t|\\s]*" // For headings, match any indentation (will be filtered later)
 					: plugin?.settings.countSubLevel
-					? "^[\\t|\\s]*?" // 如果是子级计数，使用非贪婪模式匹配任意缩进
-					: "^[\\t|\\s]+";
+					? "^[\\t|\\s]*?" // For sublevel counting, use non-greedy match for any indentation
+					: "^[\\t|\\s]*"; // For no sublevel counting, still match any indentation level
 
 				const bulletPrefix = isHeading
-					? ""
+					? "([-*+]|\\d+\\.)\\s" // For headings, just match the bullet
 					: plugin?.settings.countSubLevel
-					? "([-*+]|\\d+\\.)\\s" // 子级计数时简化前缀
-					: level !== 0
-					? `{${tabSize * (level + 1)}}([-*+]|\\d+\\.)\\s`
-					: "([-*+]|\\d+\\.)\\s";
+					? "([-*+]|\\d+\\.)\\s" // Simplified prefix for sublevel counting
+					: "([-*+]|\\d+\\.)\\s"; // For no sublevel counting, just match the bullet
 
-				// 如果启用了仅统计特定标记功能
+				// If "only count specific marks" is enabled
 				if (useOnlyCountMarks) {
 					return new RegExp(
 						basePattern +
@@ -513,53 +696,29 @@ export function taskProgressBarExtension(
 					);
 				}
 
-				// Handle alternative marks option - 仅在未启用仅统计特定标记时才考虑替代标记
-				if (
-					!useOnlyCountMarks &&
-					plugin?.settings.allowAlternateTaskStatus &&
-					alternativeMarks &&
-					alternativeMarks.length > 0
-				) {
-					if (excludePattern) {
-						// Filter alternative marks based on exclusions
-						const alternativeMarksArray = alternativeMarks
-							.replace(/[()]/g, "")
-							.split("|");
-						const excludeMarksArray = excludePattern.split("");
-						const filteredMarks = alternativeMarksArray
-							.filter((mark) => !excludeMarksArray.includes(mark))
-							.join("|");
-
-						return new RegExp(
-							basePattern +
-								bulletPrefix +
-								"\\[(" +
-								filteredMarks +
-								")\\]"
-						);
-					} else {
-						return new RegExp(
-							basePattern +
-								bulletPrefix +
-								"\\[" +
-								alternativeMarks +
-								"\\]"
-						);
-					}
-				}
-
-				// Handle standard case - 如果没有启用特殊选项
+				// When using the completed task marks
 				if (excludePattern) {
+					// Filter completed marks based on exclusions
+					const completedMarksArray = completedMarks.split("|");
+					const excludeMarksArray = excludePattern.split("");
+					const filteredMarks = completedMarksArray
+						.filter((mark) => !excludeMarksArray.includes(mark))
+						.join("|");
+
 					return new RegExp(
 						basePattern +
 							bulletPrefix +
-							"\\[[^ " +
-							excludePattern +
-							"]\\]"
+							"\\[(" +
+							filteredMarks +
+							")\\]"
 					);
 				} else {
 					return new RegExp(
-						basePattern + bulletPrefix + "\\[[^ ]\\]"
+						basePattern +
+							bulletPrefix +
+							"\\[(" +
+							completedMarks +
+							")\\]"
 					);
 				}
 			}
@@ -568,59 +727,193 @@ export function taskProgressBarExtension(
 			 * Check if a task should be counted as completed
 			 */
 			private isCompletedTask(text: string): boolean {
-				// 如果启用了仅统计特定标记
-				if (plugin?.settings.useOnlyCountMarks) {
-					const onlyCountPattern =
-						plugin?.settings.onlyCountTaskMarks || "x|X";
-					const markMatch = text.match(/\[(.)]/);
-					console.log(markMatch, text);
-					if (markMatch && markMatch[1]) {
-						const mark = markMatch[1];
-						// 检查标记是否在仅统计列表中
-						const onlyCountMarks = onlyCountPattern.split("|");
-						return onlyCountMarks.includes(mark);
-					}
+				const markMatch = text.match(/\[(.)]/);
+				if (!markMatch || !markMatch[1]) {
 					return false;
 				}
 
-				// 如果启用了替代标记
+				const mark = markMatch[1];
+
+				// Priority 1: If useOnlyCountMarks is enabled, only count tasks with specified marks
+				if (plugin?.settings.useOnlyCountMarks) {
+					const onlyCountMarks =
+						plugin?.settings.onlyCountTaskMarks.split("|");
+					return onlyCountMarks.includes(mark);
+				}
+
+				// Priority 2: If the mark is in excludeTaskMarks, don't count it
 				if (
-					plugin?.settings.allowAlternateTaskStatus &&
-					plugin?.settings.alternativeMarks
+					plugin?.settings.excludeTaskMarks &&
+					plugin.settings.excludeTaskMarks.includes(mark)
 				) {
-					const alternativeMarks = plugin?.settings.alternativeMarks
-						.replace(/[()]/g, "")
-						.split("|");
-					const markMatch = text.match(/\[(.)]/);
-					if (markMatch && markMatch[1]) {
-						const mark = markMatch[1];
-						return alternativeMarks.includes(mark);
-					}
+					return false;
 				}
 
-				// 标准检查 - 非空格的字符
+				// Priority 3: Check against the task statuses
+				// We consider a task "completed" if it has a mark from the "completed" status
+				const completedMarks =
+					plugin?.settings.taskStatuses?.completed?.split("|") || [
+						"x",
+						"X",
+					];
+
+				// Return true if the mark is in the completedMarks array
+				return completedMarks.includes(mark);
+			}
+
+			/**
+			 * Get the task status of a task
+			 */
+			private getTaskStatus(
+				text: string
+			):
+				| "completed"
+				| "inProgress"
+				| "abandoned"
+				| "notStarted"
+				| "planned" {
 				const markMatch = text.match(/\[(.)]/);
-				if (markMatch && markMatch[1]) {
-					const mark = markMatch[1];
-					// 排除需要排除的标记
-					if (
-						plugin?.settings.excludeTaskMarks &&
-						plugin.settings.excludeTaskMarks.includes(mark)
-					) {
-						return false;
-					}
-					// 标准完成是非空格
-					return mark !== " ";
+				console.log(markMatch, text);
+				if (!markMatch || !markMatch[1]) {
+					return "notStarted";
 				}
 
-				return false;
+				const mark = markMatch[1];
+				// Priority 1: If useOnlyCountMarks is enabled
+				if (plugin?.settings.useOnlyCountMarks) {
+					const onlyCountMarks =
+						plugin?.settings.onlyCountTaskMarks.split("|");
+					if (onlyCountMarks.includes(mark)) {
+						return "completed";
+					} else {
+						// If using onlyCountMarks and the mark is not in the list,
+						// determine which other status it belongs to
+						return this.determineNonCompletedStatus(mark);
+					}
+				}
+
+				// Priority 2: If the mark is in excludeTaskMarks
+				if (
+					plugin?.settings.excludeTaskMarks &&
+					plugin.settings.excludeTaskMarks.includes(mark)
+				) {
+					// Excluded marks are considered not started
+					return "notStarted";
+				}
+
+				// Priority 3: Check against specific task statuses
+				return this.determineTaskStatus(mark);
+			}
+
+			/**
+			 * Helper to determine the non-completed status of a task mark
+			 */
+			private determineNonCompletedStatus(
+				mark: string
+			): "inProgress" | "abandoned" | "notStarted" | "planned" {
+				const inProgressMarks =
+					plugin?.settings.taskStatuses?.inProgress?.split("|") || [
+						"-",
+						"/",
+					];
+
+				if (inProgressMarks.includes(mark)) {
+					return "inProgress";
+				}
+
+				const abandonedMarks =
+					plugin?.settings.taskStatuses?.abandoned?.split("|") || [
+						">",
+					];
+				if (abandonedMarks.includes(mark)) {
+					return "abandoned";
+				}
+
+				const plannedMarks =
+					plugin?.settings.taskStatuses?.planned?.split("|") || ["?"];
+				if (plannedMarks.includes(mark)) {
+					return "planned";
+				}
+
+				// If the mark doesn't match any specific category, use the countOtherStatusesAs setting
+				return (
+					(plugin?.settings.countOtherStatusesAs as
+						| "inProgress"
+						| "abandoned"
+						| "notStarted"
+						| "planned") || "notStarted"
+				);
+			}
+
+			/**
+			 * Helper to determine the specific status of a task mark
+			 */
+			private determineTaskStatus(
+				mark: string
+			):
+				| "completed"
+				| "inProgress"
+				| "abandoned"
+				| "notStarted"
+				| "planned" {
+				const completedMarks =
+					plugin?.settings.taskStatuses?.completed?.split("|") || [
+						"x",
+						"X",
+					];
+				if (completedMarks.includes(mark)) {
+					return "completed";
+				}
+
+				const inProgressMarks =
+					plugin?.settings.taskStatuses?.inProgress?.split("|") || [
+						"-",
+						"/",
+					];
+				if (inProgressMarks.includes(mark)) {
+					return "inProgress";
+				}
+
+				const abandonedMarks =
+					plugin?.settings.taskStatuses?.abandoned?.split("|") || [
+						">",
+					];
+				if (abandonedMarks.includes(mark)) {
+					return "abandoned";
+				}
+
+				const plannedMarks =
+					plugin?.settings.taskStatuses?.planned?.split("|") || ["?"];
+				if (plannedMarks.includes(mark)) {
+					return "planned";
+				}
+
+				// If not matching any specific status, check if it's a not-started mark
+				const notStartedMarks =
+					plugin?.settings.taskStatuses?.notStarted?.split("|") || [
+						" ",
+					];
+				if (notStartedMarks.includes(mark)) {
+					return "notStarted";
+				}
+
+				// If we get here, the mark doesn't match any of our defined categories
+				// Use the countOtherStatusesAs setting to determine how to count it
+				return (
+					(plugin?.settings.countOtherStatusesAs as
+						| "completed"
+						| "inProgress"
+						| "abandoned"
+						| "notStarted"
+						| "planned") || "notStarted"
+				);
 			}
 
 			/**
 			 * Check if a task marker should be excluded from counting
 			 */
 			private shouldExcludeTask(text: string): boolean {
-				// 如果没有排除设置，返回false
+				// If no exclusion settings, return false
 				if (
 					!plugin?.settings.excludeTaskMarks ||
 					plugin.settings.excludeTaskMarks.length === 0
@@ -628,7 +921,7 @@ export function taskProgressBarExtension(
 					return false;
 				}
 
-				// 检查任务标记是否在排除列表中
+				// Check if task mark is in the exclusion list
 				const taskMarkMatch = text.match(/\[(.)]/);
 				if (taskMarkMatch && taskMarkMatch[1]) {
 					const taskMark = taskMarkMatch[1];
@@ -661,15 +954,33 @@ export function taskProgressBarExtension(
 				bullet: boolean
 			): Tasks {
 				if (!textArray || textArray.length === 0) {
-					return { completed: 0, total: 0 };
+					return {
+						completed: 0,
+						total: 0,
+						inProgress: 0,
+						abandoned: 0,
+						notStarted: 0,
+						planned: 0,
+					};
 				}
 
 				let completed: number = 0;
+				let inProgress: number = 0;
+				let abandoned: number = 0;
+				let notStarted: number = 0;
+				let planned: number = 0;
 				let total: number = 0;
 				let level: number = 0;
 
 				// Get tab size from vault config
 				const tabSize = this.getTabSize();
+
+				// For debugging - collect task marks and their statuses
+				const taskDebug: {
+					mark: string;
+					status: string;
+					lineText: string;
+				}[] = [];
 
 				// Determine indentation level for bullets
 				if (!plugin?.settings.countSubLevel && bullet && textArray[0]) {
@@ -685,6 +996,7 @@ export function taskProgressBarExtension(
 					level,
 					tabSize
 				);
+
 				const bulletCompleteRegex = this.createCompletedTaskRegex(
 					plugin,
 					false,
@@ -702,41 +1014,150 @@ export function taskProgressBarExtension(
 					if (i === 0) continue; // Skip the first line
 
 					if (bullet) {
-						// 确保每个任务只被计算一次
-						const lineText = textArray[i].trim();
-						// 首先检查是否匹配任务格式，然后检查是否是应该被排除的任务类型
+						const lineText = textArray[i];
+						const lineTextTrimmed = lineText.trim();
+
+						// If countSubLevel is false, check the indentation level directly
+						if (!plugin?.settings.countSubLevel) {
+							const indentMatch = lineText.match(/^[\s|\t]*/);
+							const lineLevel = indentMatch
+								? indentMatch[0].length / tabSize
+								: 0;
+
+							// Only count this task if it's exactly one level deeper
+							if (lineLevel !== level + 1) {
+								continue;
+							}
+						}
+
+						// First check if it matches task format, then check if it should be excluded
 						if (
-							lineText &&
+							lineTextTrimmed &&
 							lineText.match(bulletTotalRegex) &&
-							!this.shouldExcludeTask(lineText)
+							!this.shouldExcludeTask(lineTextTrimmed)
 						) {
 							total++;
-							// 使用新方法判断是否为已完成任务
-							if (this.isCompletedTask(lineText)) {
+							// Get the task status
+							const status = this.getTaskStatus(lineTextTrimmed);
+
+							// Extract the mark for debugging
+							const markMatch = lineTextTrimmed.match(/\[(.)]/);
+							if (markMatch && markMatch[1]) {
+								taskDebug.push({
+									mark: markMatch[1],
+									status: status,
+									lineText: lineTextTrimmed,
+								});
+							}
+
+							// Count based on status
+							if (status === "completed") {
 								completed++;
+							} else if (status === "inProgress") {
+								inProgress++;
+							} else if (status === "abandoned") {
+								abandoned++;
+							} else if (status === "planned") {
+								planned++;
+							} else if (status === "notStarted") {
+								notStarted++;
 							}
 						}
 					} else if (plugin?.settings.addTaskProgressBarToHeading) {
-						const lineText = textArray[i].trim();
-						// 同样使用shouldExcludeTask函数进行额外的验证
+						const lineText = textArray[i];
+						const lineTextTrimmed = lineText.trim();
+
+						// For headings, if countSubLevel is false, only count top-level tasks (no indentation)
+						if (!plugin?.settings.countSubLevel) {
+							const indentMatch = lineText.match(/^[\s|\t]*/);
+							const lineLevel = indentMatch
+								? indentMatch[0].length / tabSize
+								: 0;
+
+							// For headings, only count tasks with no indentation when countSubLevel is false
+							if (lineLevel !== 0) {
+								continue;
+							}
+						}
+
+						// Also use shouldExcludeTask for additional validation
 						if (
-							lineText &&
+							lineTextTrimmed &&
 							lineText.match(headingTotalRegex) &&
-							!this.shouldExcludeTask(lineText)
+							!this.shouldExcludeTask(lineTextTrimmed)
 						) {
 							total++;
-							// 使用新方法判断是否为已完成任务
-							if (this.isCompletedTask(lineText)) {
+							// Get the task status
+							const status = this.getTaskStatus(lineTextTrimmed);
+
+							// Extract the mark for debugging
+							const markMatch = lineTextTrimmed.match(/\[(.)]/);
+							if (markMatch && markMatch[1]) {
+								taskDebug.push({
+									mark: markMatch[1],
+									status: status,
+									lineText: lineTextTrimmed,
+								});
+							}
+
+							// Count based on status
+							if (status === "completed") {
 								completed++;
+							} else if (status === "inProgress") {
+								inProgress++;
+							} else if (status === "abandoned") {
+								abandoned++;
+							} else if (status === "planned") {
+								planned++;
+							} else if (status === "notStarted") {
+								notStarted++;
 							}
 						}
 					}
 				}
 
-				// 确保完成数不超过总数
-				completed = Math.min(completed, total);
+				// Log debug information
+				if (taskDebug.length > 0) {
+					console.log("Task counting debug:", {
+						taskDebug,
+						completedCount: completed,
+						inProgressCount: inProgress,
+						abandonedCount: abandoned,
+						notStartedCount: notStarted,
+						plannedCount: planned,
+						totalCount: total,
+						settings: {
+							useOnlyCountMarks:
+								plugin?.settings.useOnlyCountMarks,
+							onlyCountTaskMarks:
+								plugin?.settings.onlyCountTaskMarks,
+							excludeTaskMarks: plugin?.settings.excludeTaskMarks,
+							taskStatuses: plugin?.settings.taskStatuses,
+							countOtherStatusesAs:
+								plugin?.settings.countOtherStatusesAs,
+						},
+					});
+				}
 
-				return { completed, total };
+				// Ensure counts don't exceed total
+				completed = Math.min(completed, total);
+				inProgress = Math.min(inProgress, total - completed);
+				abandoned = Math.min(abandoned, total - completed - inProgress);
+				planned = Math.min(
+					planned,
+					total - completed - inProgress - abandoned
+				);
+				notStarted =
+					total - completed - inProgress - abandoned - planned;
+
+				return {
+					completed,
+					total,
+					inProgress,
+					abandoned,
+					notStarted,
+					planned,
+				};
 			}
 		},
 		{

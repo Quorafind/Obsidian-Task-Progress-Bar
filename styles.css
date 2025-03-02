@@ -1,3 +1,33 @@
+/* Define theme variables */
+:root {
+	/* Task status colors - light theme */
+	--task-completed-color: #4caf50;
+	--task-in-progress-color: #f9d923;
+	--task-abandoned-color: #eb5353;
+	--task-planned-color: #9c27b0; /* Added planned task color */
+
+	/* Progress bar gradient colors - light theme */
+	--progress-0-color: #ae431e;
+	--progress-25-color: #e5890a;
+	--progress-50-color: #b4c6a6;
+	--progress-75-color: #6bcb77;
+	--progress-100-color: #4d96ff;
+}
+
+/* Dark theme color adjustments */
+.theme-dark {
+	--task-completed-color: #4caf50;
+	--task-in-progress-color: #ffc107;
+	--task-abandoned-color: #f44336;
+	--task-planned-color: #ce93d8; /* Added planned task color for dark theme */
+
+	--progress-0-color: #ae431e;
+	--progress-25-color: #e5890a;
+	--progress-50-color: #b4c6a6;
+	--progress-75-color: #6bcb77;
+	--progress-100-color: #4d96ff;
+}
+
 /* Set Default Progress Bar For Plugin */
 .cm-task-progress-bar {
 	display: inline-block;
@@ -14,28 +44,63 @@
 }
 
 .progress-bar-inline {
-	border-radius: 10px;
 	height: 8px;
+	position: relative;
+}
+
+/* Progress bar colors for different percentages of completion */
+.progress-bar-inline-empty {
+	background-color: #f1f1f1;
 }
 
 .progress-bar-inline-0 {
-	background-color: #AE431E;
+	background-color: var(--progress-0-color);
 }
 
 .progress-bar-inline-1 {
-	background-color: #E5890A;
+	background-color: var(--progress-25-color);
 }
 
 .progress-bar-inline-2 {
-	background-color: #B4C6A6;
+	background-color: var(--progress-50-color);
 }
 
 .progress-bar-inline-3 {
-	background-color: #6BCB77;
+	background-color: var(--progress-75-color);
 }
 
-.progress-bar-inline-4 {
-	background-color: #4D96FF;
+.progress-bar-inline-complete {
+	background-color: var(--progress-100-color);
+}
+
+/* Colors for different task statuses */
+.progress-completed {
+	background-color: var(--task-completed-color);
+	z-index: 3;
+}
+
+.progress-in-progress {
+	background-color: var(--task-in-progress-color);
+	z-index: 2;
+	position: absolute;
+	top: 0;
+	height: 100%;
+}
+
+.progress-abandoned {
+	background-color: var(--task-abandoned-color);
+	z-index: 1;
+	position: absolute;
+	top: 0;
+	height: 100%;
+}
+
+.progress-planned {
+	background-color: var(--task-planned-color);
+	z-index: 1;
+	position: absolute;
+	top: 0;
+	height: 100%;
 }
 
 .progress-bar-inline-background {
@@ -46,19 +111,44 @@
 	justify-content: flex-start;
 	align-items: center;
 	width: 85px;
+	position: relative;
+	overflow: hidden;
+}
+
+/* Status indicators in the task number display */
+.cm-task-progress-bar .task-status-indicator {
+	display: inline-block;
+	margin-right: 2px;
+}
+
+.cm-task-progress-bar .completed-indicator {
+	color: var(--task-completed-color);
+}
+
+.cm-task-progress-bar .in-progress-indicator {
+	color: var(--task-in-progress-color);
+}
+
+.cm-task-progress-bar .abandoned-indicator {
+	color: var(--task-abandoned-color);
+}
+
+.cm-task-progress-bar .planned-indicator {
+	color: var(--task-planned-color);
 }
 
 /* Set Default Progress Bar With Number For Plugin */
-
 .cm-task-progress-bar.with-number {
 	display: inline-flex;
 	align-items: center;
 }
 
-.HyperMD-header .cm-task-progress-bar.with-number .progress-bar-inline-background, .HyperMD-header .cm-task-progress-bar.with-number .progress-status {
+.HyperMD-header
+	.cm-task-progress-bar.with-number
+	.progress-bar-inline-background,
+.HyperMD-header .cm-task-progress-bar.with-number .progress-status {
 	margin-bottom: 5px;
 }
-
 
 .cm-task-progress-bar.with-number .progress-bar-inline-background {
 	margin-bottom: -2px;
@@ -68,4 +158,25 @@
 .cm-task-progress-bar.with-number .progress-status {
 	font-size: 13px;
 	margin-left: 3px;
+}
+
+/* Adaptations for dark theme */
+.theme-dark .progress-completed {
+	background-color: var(--task-completed-color);
+}
+
+.theme-dark .progress-in-progress {
+	background-color: var(--task-in-progress-color);
+}
+
+.theme-dark .progress-abandoned {
+	background-color: var(--task-abandoned-color);
+}
+
+.theme-dark .progress-planned {
+	background-color: var(--task-planned-color);
+}
+
+.task-progress-bar-popover {
+	width: 400px;
 }
