@@ -168,7 +168,23 @@ class TaskProgressBarWidget extends WidgetType {
 				// Calculate percentage of completed tasks
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				text = `${percentage}%`;
+				
+				// Check if custom progress ranges are enabled
+				if (this.plugin?.settings.customizeProgressRanges) {
+					// Find a matching range for the current percentage
+					const matchingRange = this.plugin.settings.progressRanges.find(
+						range => percentage >= range.min && percentage <= range.max
+					);
+					
+					// If a matching range is found, use its custom text
+					if (matchingRange) {
+						text = matchingRange.text.replace("{{PROGRESS}}", percentage.toString());
+					} else {
+						text = `${percentage}%`;
+					}
+				} else {
+					text = `${percentage}%`;
+				}
 			} else {
 				// Show detailed counts if we have in-progress, abandoned, or planned tasks
 				if (
@@ -270,7 +286,23 @@ class TaskProgressBarWidget extends WidgetType {
 			if (this.plugin?.settings.showPercentage) {
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				text = `${percentage}%`;
+				
+				// Check if custom progress ranges are enabled
+				if (this.plugin?.settings.customizeProgressRanges) {
+					// Find a matching range for the current percentage
+					const matchingRange = this.plugin.settings.progressRanges.find(
+						range => percentage >= range.min && percentage <= range.max
+					);
+					
+					// If a matching range is found, use its custom text
+					if (matchingRange) {
+						text = matchingRange.text.replace("{{PROGRESS}}", percentage.toString());
+					} else {
+						text = `${percentage}%`;
+					}
+				} else {
+					text = `${percentage}%`;
+				}
 			} else {
 				// Show detailed counts if we have in-progress or abandoned tasks
 				if (this.inProgress > 0 || this.abandoned > 0) {

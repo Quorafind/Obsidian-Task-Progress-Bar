@@ -29,6 +29,14 @@ export interface TaskProgressBarSettings {
 	excludeTaskMarks: string;
 	useOnlyCountMarks: boolean;
 	onlyCountTaskMarks: string;
+
+	// Progress range text customization
+	customizeProgressRanges: boolean;
+	progressRanges: Array<{
+		min: number;
+		max: number;
+		text: string;
+	}>;
 }
 
 export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
@@ -58,6 +66,16 @@ export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	excludeTaskMarks: "",
 	onlyCountTaskMarks: "x|X",
 	useOnlyCountMarks: false,
+
+	// Progress range text customization
+	customizeProgressRanges: false,
+	progressRanges: [
+		{ min: 0, max: 20, text: "Just started {{PROGRESS}}%" },
+		{ min: 20, max: 40, text: "Making progress {{PROGRESS}}%" },
+		{ min: 40, max: 60, text: "Half way {{PROGRESS}}%" },
+		{ min: 60, max: 80, text: "Good progress {{PROGRESS}}%" },
+		{ min: 80, max: 100, text: "Almost there {{PROGRESS}}%" },
+	],
 };
 
 export class TaskProgressBarSettingTab extends PluginSettingTab {
@@ -526,8 +544,171 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 						.onChange(async (value) => {
 							this.plugin.settings.showPercentage = value;
 							this.applySettingsUpdate();
+
+							setTimeout(() => {
+								this.display();
+							}, 200);
 						})
 				);
+
+			if (this.plugin.settings.showPercentage) {
+				new Setting(this.containerEl)
+					.setName("Customize progress text")
+					.setDesc(
+						"Toggle this to customize text representation for different progress percentage ranges."
+					)
+					.addToggle((toggle) =>
+						toggle
+							.setValue(
+								this.plugin.settings.customizeProgressRanges
+							)
+							.onChange(async (value) => {
+								this.plugin.settings.customizeProgressRanges =
+									value;
+								this.applySettingsUpdate();
+
+								setTimeout(() => {
+									this.display();
+								}, 200);
+							})
+					);
+
+				if (this.plugin.settings.customizeProgressRanges) {
+					this.addProgressRangesSettings();
+				}
+			}
 		}
+	}
+
+	addProgressRangesSettings() {
+		new Setting(this.containerEl)
+			.setName("Progress Ranges")
+			.setDesc(
+				"Define progress ranges and their corresponding text representations."
+			)
+			.setHeading();
+
+		// Display existing ranges
+		this.plugin.settings.progressRanges.forEach((range, index) => {
+			new Setting(this.containerEl)
+				.setName(`Range ${index + 1}: ${range.min}%-${range.max}%`)
+				.setDesc(
+					`Use {{PROGRESS}} as a placeholder for the percentage value`
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder(
+							"Template text with {{PROGRESS}} placeholder"
+						)
+						.setValue(range.text)
+						.onChange(async (value) => {
+							this.plugin.settings.progressRanges[index].text =
+								value;
+							this.applySettingsUpdate();
+						})
+				)
+				.addButton((button) => {
+					button.setButtonText("Delete").onClick(async () => {
+						this.plugin.settings.progressRanges.splice(index, 1);
+						this.applySettingsUpdate();
+						this.display();
+					});
+				});
+		});
+
+		new Setting(this.containerEl)
+			.setName("Add new range")
+			.setDesc("Add a new progress percentage range with custom text");
+
+		// Add a new range
+		const newRangeSetting = new Setting(this.containerEl);
+		newRangeSetting.infoEl.detach();
+
+		newRangeSetting
+			.addText((text) =>
+				text
+					.setPlaceholder("Min percentage (0-100)")
+					.setValue("")
+					.onChange(async (value) => {
+						// This will be handled when the user clicks the Add button
+					})
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("Max percentage (0-100)")
+					.setValue("")
+					.onChange(async (value) => {
+						// This will be handled when the user clicks the Add button
+					})
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("Text template (use {{PROGRESS}})")
+					.setValue("")
+					.onChange(async (value) => {
+						// This will be handled when the user clicks the Add button
+					})
+			)
+			.addButton((button) => {
+				button.setButtonText("Add").onClick(async () => {
+					const settingsContainer = button.buttonEl.parentElement;
+					if (!settingsContainer) return;
+
+					const inputs = settingsContainer.querySelectorAll("input");
+					if (inputs.length < 3) return;
+
+					const min = parseInt(inputs[0].value);
+					const max = parseInt(inputs[1].value);
+					const text = inputs[2].value;
+
+					if (isNaN(min) || isNaN(max) || !text) {
+						return;
+					}
+
+					this.plugin.settings.progressRanges.push({
+						min,
+						max,
+						text,
+					});
+
+					// Clear inputs
+					inputs[0].value = "";
+					inputs[1].value = "";
+					inputs[2].value = "";
+
+					this.applySettingsUpdate();
+					this.display();
+				});
+			});
+
+		// Reset to defaults
+		new Setting(this.containerEl)
+			.setName("Reset to defaults")
+			.setDesc("Reset progress ranges to default values")
+			.addButton((button) => {
+				button.setButtonText("Reset").onClick(async () => {
+					this.plugin.settings.progressRanges = [
+						{ min: 0, max: 20, text: "Just started {{PROGRESS}}%" },
+						{
+							min: 20,
+							max: 40,
+							text: "Making progress {{PROGRESS}}%",
+						},
+						{ min: 40, max: 60, text: "Half way {{PROGRESS}}%" },
+						{
+							min: 60,
+							max: 80,
+							text: "Good progress {{PROGRESS}}%",
+						},
+						{
+							min: 80,
+							max: 100,
+							text: "Almost there {{PROGRESS}}%",
+						},
+					];
+					this.applySettingsUpdate();
+					this.display();
+				});
+			});
 	}
 }
