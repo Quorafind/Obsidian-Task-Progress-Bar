@@ -1101,7 +1101,6 @@ class ProgressBar extends Component {
 		this.notStarted = notStarted;
 		this.total = total;
 	}
-
 	changePercentage() {
 		if (this.total === 0) return;
 
@@ -1185,7 +1184,22 @@ class ProgressBar extends Component {
 				// Calculate percentage of completed tasks
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				text = `${percentage}%`;
+				
+				// Use custom progress range text if enabled
+				if (this.plugin?.settings.customizeProgressRanges) {
+					const ranges = this.plugin.settings.progressRanges;
+					let rangeText = `${percentage}%`;
+					
+					for (const range of ranges) {
+						if (percentage >= range.min && percentage <= range.max) {
+							rangeText = range.text.replace("{{PROGRESS}}", percentage.toString());
+							break;
+						}
+					}
+					text = rangeText;
+				} else {
+					text = `${percentage}%`;
+				}
 			} else {
 				// Show detailed counts if we have in-progress or abandoned tasks
 				if (
@@ -1251,7 +1265,22 @@ class ProgressBar extends Component {
 			if (this.plugin?.settings.showPercentage) {
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				text = `${percentage}%`;
+				
+				// Use custom progress range text if enabled
+				if (this.plugin?.settings.customizeProgressRanges) {
+					const ranges = this.plugin.settings.progressRanges;
+					let rangeText = `${percentage}%`;
+					
+					for (const range of ranges) {
+						if (percentage >= range.min && percentage <= range.max) {
+							rangeText = range.text.replace("{{PROGRESS}}", percentage.toString());
+							break;
+						}
+					}
+					text = rangeText;
+				} else {
+					text = `${percentage}%`;
+				}
 			} else {
 				// Show detailed counts if we have in-progress or abandoned tasks
 				if (
