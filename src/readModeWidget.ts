@@ -1,5 +1,11 @@
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
-import { Component, MarkdownPostProcessorContext, TFile } from "obsidian";
+import {
+	Component,
+	debounce,
+	MarkdownPostProcessorContext,
+	MarkdownSectionInformation,
+	TFile,
+} from "obsidian";
 import { shouldHideProgressBarInPreview } from "./utils";
 
 interface GroupElement {
@@ -30,6 +36,49 @@ function groupElementsByParent(childrenElements: HTMLElement[]) {
 	return result;
 }
 
+// Group tasks by their heading sections
+function groupTasksByHeading(
+	element: HTMLElement
+): Map<HTMLElement | null, HTMLElement[]> {
+	const taskItems = element.findAll(".task-list-item");
+	const headings = element.findAll("h1, h2, h3, h4, h5, h6");
+	const tasksByHeading = new Map<HTMLElement | null, HTMLElement[]>();
+
+	// Initialize with an entry for tasks not under any heading
+	tasksByHeading.set(null, []);
+
+	// If no headings, return all tasks as not under any heading
+	if (headings.length === 0) {
+		tasksByHeading.set(null, taskItems);
+		return tasksByHeading;
+	}
+
+	// Group tasks by their preceding heading
+	let currentHeading: HTMLElement | null = null;
+
+	// Sort all elements (headings and tasks) by their position in the document
+	const allElements = [...headings, ...taskItems].sort((a, b) => {
+		const posA = a.getBoundingClientRect().top;
+		const posB = b.getBoundingClientRect().top;
+		return posA - posB;
+	});
+
+	for (const el of allElements) {
+		if (el.matches("h1, h2, h3, h4, h5, h6")) {
+			currentHeading = el;
+			// Initialize array for this heading if not already done
+			if (!tasksByHeading.has(currentHeading)) {
+				tasksByHeading.set(currentHeading, []);
+			}
+		} else if (el.matches(".task-list-item")) {
+			// Add task to its heading group
+			tasksByHeading.get(currentHeading)?.push(el);
+		}
+	}
+
+	return tasksByHeading;
+}
+
 function loadProgressbar(
 	plugin: TaskProgressBarPlugin,
 	groupedElements: GroupElement[],
@@ -55,6 +104,28 @@ function loadProgressbar(
 	}
 }
 
+// Add progress bars to headings
+function addHeadingProgressBars(
+	plugin: TaskProgressBarPlugin,
+	tasksByHeading: Map<HTMLElement | null, HTMLElement[]>,
+	type: "dataview" | "normal"
+) {
+	tasksByHeading.forEach((tasks, heading) => {
+		// Skip if heading is null or tasks array is empty
+		if (!heading || tasks.length === 0) return;
+
+		// Create a group element structure for the progress bar
+		const group: GroupElement = {
+			parentElement: heading,
+			childrenElement: tasks,
+		};
+
+		// Create and append the progress bar to the heading
+		const progressBar = new ProgressBar(plugin, group, type).onload();
+		heading.appendChild(progressBar);
+	});
+}
+
 export function updateProgressBarInElement({
 	plugin,
 	element,
@@ -69,10 +140,131 @@ export function updateProgressBarInElement({
 		return;
 	}
 
+	// Handle heading elements directly
+	if (
+		plugin.settings.enableHeadingProgressBar &&
+		element.children[0].matches("h1, h2, h3, h4, h5, h6")
+	) {
+		// Skip if this heading already has a progress bar
+		if (element.find(".cm-task-progress-bar")) {
+			return;
+		}
+
+		// Get section info for this heading
+		const sectionInfo = ctx.getSectionInfo(element);
+		if (sectionInfo) {
+			// Parse the section text to find tasks
+			// Get text from the section start line until the next heading of same level or higher
+
+			const lines = sectionInfo.text.split("\n");
+			const sectionLines: string[] = [];
+
+			const headingText = lines[sectionInfo.lineStart];
+			const headingLevel = headingText.match(/^(#{1,6})\s/);
+
+			if (!headingLevel) {
+				return;
+			}
+
+			const headingNumber = headingLevel[1].length;
+
+			// Start from the heading line and collect all lines until next heading of same or higher level
+			let inSection = false;
+			for (const line of lines.slice(sectionInfo.lineStart)) {
+				// Check if this is a heading line
+				const headingMatch = line.match(/^(#{1,6})\s/);
+
+				if (headingMatch) {
+					const currentHeadingLevel = headingMatch[1].length;
+
+					// If we're already in the section and find a heading of same or higher level, stop
+					if (inSection && currentHeadingLevel <= headingNumber) {
+						break;
+					}
+				}
+
+				// Start collecting after we've seen the initial heading
+				if (!inSection) {
+					inSection = true;
+				}
+
+				sectionLines.push(line);
+			}
+
+			// Filter for task lines
+			const taskLines = sectionLines.filter((line) => {
+				const trimmed = line.trim();
+				// Match both - [ ] and * [ ] task formats
+				return trimmed.match(/^([-*+]|\\d+\\.)\s*\[(.)\]/) !== null;
+			});
+
+			if (taskLines.length > 0) {
+				// Create a virtual task list for processing
+				const taskElements: HTMLElement[] = [];
+
+				// Create task list items for each task found
+				for (const taskLine of taskLines) {
+					const taskEl = createEl("li", { cls: "task-list-item" });
+
+					// Extract the task mark to properly set data-task attribute
+					const markMatch = taskLine.match(/\[(.)\]/);
+					if (markMatch && markMatch[1]) {
+						const mark = markMatch[1];
+						taskEl.setAttribute("data-task", mark);
+
+						// Create a checkbox element for proper structure
+						const checkbox = createEl("input", {
+							cls: "task-list-item-checkbox",
+							type: "checkbox",
+						}) as HTMLInputElement;
+
+						// Set checkbox checked state based on completion mark
+						const completedMarks =
+							plugin.settings.taskStatuses.completed.split("|");
+						if (completedMarks.includes(mark)) {
+							checkbox.checked = true;
+						}
+
+						taskEl.prepend(checkbox);
+					}
+
+					// Extract the task text (everything after the checkbox)
+					const taskText = taskLine.replace(
+						/^([-*+]|\\d+\\.)\s*\[(.)\]\s*/,
+						""
+					);
+					taskEl.appendChild(createSpan({ text: taskText }));
+					taskElements.push(taskEl);
+				}
+
+				// Create group structure for the progress bar
+				const group: GroupElement = {
+					parentElement: element.children[0] as HTMLElement,
+					childrenElement: taskElements,
+				};
+
+				// Create and append the progress bar
+				const progressBar = new ProgressBar(plugin, group, "normal", {
+					sectionInfo: sectionInfo,
+					ctx: ctx,
+					element: element,
+				}).onload();
+				element.children[0].appendChild(progressBar);
+			}
+		}
+	}
+
+	// Process task lists (original logic)
 	if (element.find("ul.contains-task-list")) {
 		const elements = element.findAll(".task-list-item");
 		const groupedElements = groupElementsByParent(elements);
 		loadProgressbar(plugin, groupedElements, "normal");
+
+		// Add heading progress bars if enabled in settings
+		if (plugin.settings.enableHeadingProgressBar === true) {
+			const tasksByHeading = groupTasksByHeading(element);
+			addHeadingProgressBars(plugin, tasksByHeading, "normal");
+		}
 	} else if (element.closest(".dataview-container")) {
 		const parentElement = element.closest(".dataview-container");
 		if (!parentElement) return;
@@ -81,6 +273,15 @@ export function updateProgressBarInElement({
 		const elements = parentElement.findAll(".task-list-item");
 		const groupedElements = groupElementsByParent(elements);
 		loadProgressbar(plugin, groupedElements, "dataview");
+
+		// Add heading progress bars if enabled in settings
+		if (plugin.settings.enableHeadingProgressBar === true) {
+			const tasksByHeading = groupTasksByHeading(
+				parentElement as HTMLElement
+			);
+			addHeadingProgressBars(plugin, tasksByHeading, "dataview");
+		}
+
 		parentElement.setAttribute("data-task-progress-bar", "true");
 	}
 }
@@ -91,6 +292,7 @@ class ProgressBar extends Component {
 	progressEl: HTMLDivElement;
 	inProgressEl: HTMLDivElement;
 	abandonedEl: HTMLDivElement;
+	plannedEl: HTMLDivElement;
 	numberEl: HTMLDivElement;
 
 	plugin: TaskProgressBarPlugin;
@@ -100,23 +302,36 @@ class ProgressBar extends Component {
 	inProgress: number;
 	abandoned: number;
 	notStarted: number;
+	planned: number;
 
 	group: GroupElement;
+	info?: {
+		sectionInfo?: MarkdownSectionInformation;
+		ctx?: MarkdownPostProcessorContext;
+		element?: HTMLElement;
+	};
 
 	constructor(
 		plugin: TaskProgressBarPlugin,
 		group: GroupElement,
-		readonly type: "dataview" | "normal"
+		readonly type: "dataview" | "normal",
+		info?: {
+			sectionInfo?: MarkdownSectionInformation;
+			ctx?: MarkdownPostProcessorContext;
+			element?: HTMLElement;
+		}
 	) {
 		super();
 		this.plugin = plugin;
 		this.group = group;
+		this.info = info;
 
 		this.completed = 0;
 		this.total = 0;
 		this.inProgress = 0;
 		this.abandoned = 0;
 		this.notStarted = 0;
+		this.planned = 0;
 
 		if (type === "dataview") {
 			this.updateCompletedAndTotalDataview();
@@ -129,9 +344,29 @@ class ProgressBar extends Component {
 			if (this.type === "normal") {
 				el.on("click", "input", () => {
 					setTimeout(() => {
+						// Update this progress bar
 						this.updateCompletedAndTotal();
 						this.changePercentage();
 						this.changeNumber();
+
+						// If this is a heading progress bar, we need to refresh the entire view
+						// to update all related task progress bars
+						if (
+							this.group.parentElement.matches(
+								"h1, h2, h3, h4, h5, h6"
+							)
+						) {
+							const container = this.group.parentElement.closest(
+								".markdown-reading-view"
+							) as HTMLElement;
+							if (container) {
+								// Force refresh of the view by triggering a layout change
+								container.style.display = "none";
+								setTimeout(() => {
+									container.style.display = "";
+								}, 10);
+							}
+						}
 					}, 200);
 				});
 			} else if (this.type === "dataview") {
@@ -139,19 +374,235 @@ class ProgressBar extends Component {
 					if (!ev.target) return;
 					if ((ev.target as HTMLElement).tagName === "INPUT") {
 						setTimeout(() => {
+							// Update this progress bar
 							this.updateCompletedAndTotalDataview();
 							this.changePercentage();
 							this.changeNumber();
+
+							// If this is a heading progress bar, we need to refresh the entire view
+							// to update all related task progress bars
+							if (
+								this.group.parentElement.matches(
+									"h1, h2, h3, h4, h5, h6"
+								)
+							) {
+								const container =
+									this.group.parentElement.closest(
+										".markdown-reading-view"
+									) as HTMLElement;
+								if (container) {
+									// Force refresh of the view by triggering a layout change
+									container.style.display = "none";
+									setTimeout(() => {
+										container.style.display = "";
+									}, 10);
+								}
+							}
 						}, 200);
 					}
 				});
 			}
 		}
+
+		// Set up file monitoring
+		this.setupFileMonitoring();
+	}
+
+	setupFileMonitoring() {
+		if (!this.info) return;
+
+		const infoFile = this.info.ctx?.sourcePath;
+		if (!infoFile) return;
+
+		this.registerEvent(
+			this.plugin.app.vault.on("modify", (file) => {
+				if (infoFile === file.path) {
+					// Instead of just unloading, update the progress bar with new data
+					this.debounceUpdateFromModifiedFile();
+				}
+			})
+		);
+	}
+
+	debounceUpdateFromModifiedFile = debounce(() => {
+		this.updateFromModifiedFile();
+	}, 200);
+
+	updateFromModifiedFile() {
+		if (
+			!this.info ||
+			!this.info.ctx ||
+			!this.info.element ||
+			!this.info.sectionInfo
+		) {
+			// If missing any required info, just unload the old component
+			this.unload();
+			return;
+		}
+
+		const { ctx, element, sectionInfo } = this.info;
+
+		// Get updated section info
+		const updatedSectionInfo = ctx.getSectionInfo(element);
+		if (!updatedSectionInfo) {
+			this.unload();
+			return;
+		}
+
+		// Update the stored section info
+		this.info.sectionInfo = updatedSectionInfo;
+
+		// Parse the section text to find tasks (similar to the code in updateProgressBarInElement)
+		const lines = updatedSectionInfo.text.split("\n");
+		const sectionLines: string[] = [];
+
+		const headingText = lines[updatedSectionInfo.lineStart];
+		const headingLevel = headingText.match(/^(#{1,6})\s/);
+
+		if (!headingLevel) {
+			this.unload();
+			return;
+		}
+
+		const headingNumber = headingLevel[1].length;
+
+		// Start from the heading line and collect all lines until next heading of same or higher level
+		let inSection = false;
+		for (const line of lines.slice(updatedSectionInfo.lineStart)) {
+			// Check if this is a heading line
+			const headingMatch = line.match(/^(#{1,6})\s/);
+
+			if (headingMatch) {
+				const currentHeadingLevel = headingMatch[1].length;
+
+				// If we're already in the section and find a heading of same or higher level, stop
+				if (inSection && currentHeadingLevel <= headingNumber) {
+					break;
+				}
+			}
+
+			// Start collecting after we've seen the initial heading
+			if (!inSection) {
+				inSection = true;
+			}
+
+			sectionLines.push(line);
+		}
+
+		// Filter for task lines
+		const taskLines = sectionLines.filter((line) => {
+			const trimmed = line.trim();
+			// Match both - [ ] and * [ ] task formats
+			return trimmed.match(/^([-*+]|\\d+\\.)\s*\[(.)\]/) !== null;
+		});
+
+		if (taskLines.length === 0) {
+			// No tasks found, remove the progress bar
+			this.unload();
+			return;
+		}
+
+		// Create updated task elements
+		const taskElements: HTMLElement[] = [];
+
+		// Create task list items for each task found
+		for (const taskLine of taskLines) {
+			const taskEl = createEl("li", { cls: "task-list-item" });
+
+			// Extract the task mark to properly set data-task attribute
+			const markMatch = taskLine.match(/\[(.)\]/);
+			if (markMatch && markMatch[1]) {
+				const mark = markMatch[1];
+				taskEl.setAttribute("data-task", mark);
+
+				// Create a checkbox element for proper structure
+				const checkbox = createEl("input", {
+					cls: "task-list-item-checkbox",
+					type: "checkbox",
+				}) as HTMLInputElement;
+
+				// Set checkbox checked state based on completion mark
+				const completedMarks =
+					this.plugin.settings.taskStatuses.completed.split("|");
+				if (completedMarks.includes(mark)) {
+					checkbox.checked = true;
+				}
+
+				taskEl.prepend(checkbox);
+			}
+
+			// Extract the task text (everything after the checkbox)
+			const taskText = taskLine.replace(
+				/^([-*+]|\\d+\\.)\s*\[(.)\]\s*/,
+				""
+			);
+			taskEl.appendChild(createSpan({ text: taskText }));
+			taskElements.push(taskEl);
+		}
+
+		// Update the group with new task elements
+		this.group.childrenElement = taskElements;
+
+		// Update progress bar stats
+		this.updateCompletedAndTotal();
+
+		// If the number of tasks with different statuses has changed,
+		// we may need to recreate UI elements
+		const needsUIRecreation =
+			(this.inProgress > 0 && !this.inProgressEl) ||
+			(this.inProgress === 0 && this.inProgressEl) ||
+			(this.abandoned > 0 && !this.abandonedEl) ||
+			(this.abandoned === 0 && this.abandonedEl) ||
+			(this.planned > 0 && !this.plannedEl) ||
+			(this.planned === 0 && this.plannedEl);
+
+		if (needsUIRecreation) {
+			// Clean up old elements
+			if (this.progressBarEl && this.progressBarEl.parentElement) {
+				const parent = this.progressBarEl.parentElement;
+				const newProgressBar = this.onload(); // Create new progress bar
+				this.progressBarEl.remove();
+				parent.appendChild(newProgressBar);
+			}
+		} else {
+			// Just update values on existing elements
+			this.changePercentage();
+			this.changeNumber();
+		}
+	}
+
+	getTaskStatusFromDataTask(
+		dataTask: string
+	): "completed" | "inProgress" | "abandoned" | "planned" | "notStarted" {
+		// Priority 1: If useOnlyCountMarks is enabled
+		if (this.plugin?.settings.useOnlyCountMarks) {
+			const onlyCountMarks =
+				this.plugin?.settings.onlyCountTaskMarks.split("|");
+			if (onlyCountMarks.includes(dataTask)) {
+				return "completed";
+			} else {
+				// If using onlyCountMarks and the mark is not in the list,
+				// determine which other status it belongs to
+				return this.determineNonCompletedStatusFromDataTask(dataTask);
+			}
+		}
+
+		// Priority 2: If the mark is in excludeTaskMarks
+		if (
+			this.plugin?.settings.excludeTaskMarks &&
+			this.plugin.settings.excludeTaskMarks.includes(dataTask)
+		) {
+			// Excluded marks are considered not started
+			return "notStarted";
+		}
+
+		// Priority 3: Check against specific task statuses
+		return this.determineTaskStatusFromDataTask(dataTask);
 	}
 
 	getTaskStatus(
 		text: string
-	): "completed" | "inProgress" | "abandoned" | "notStarted" {
+	): "completed" | "inProgress" | "abandoned" | "planned" | "notStarted" {
 		const markMatch = text.match(/\[(.)]/);
 		if (!markMatch || !markMatch[1]) {
 			return "notStarted";
@@ -185,27 +636,131 @@ class ProgressBar extends Component {
 		return this.determineTaskStatus(mark);
 	}
 
+	determineNonCompletedStatusFromDataTask(
+		dataTask: string
+	): "inProgress" | "abandoned" | "planned" | "notStarted" {
+		const inProgressMarks =
+			this.plugin?.settings.taskStatuses.inProgress?.split("|") || [
+				"-",
+				"/",
+			];
+		if (inProgressMarks.includes(dataTask)) {
+			return "inProgress";
+		}
+
+		const abandonedMarks =
+			this.plugin?.settings.taskStatuses.abandoned?.split("|") || [">"];
+		if (abandonedMarks.includes(dataTask)) {
+			return "abandoned";
+		}
+
+		const plannedMarks = this.plugin?.settings.taskStatuses.planned?.split(
+			"|"
+		) || ["?"];
+		if (plannedMarks.includes(dataTask)) {
+			return "planned";
+		}
+
+		// If the mark doesn't match any specific category, use the countOtherStatusesAs setting
+		return (
+			(this.plugin?.settings.countOtherStatusesAs as
+				| "inProgress"
+				| "abandoned"
+				| "notStarted"
+				| "planned") || "notStarted"
+		);
+	}
+
 	determineNonCompletedStatus(
 		mark: string
-	): "inProgress" | "abandoned" | "notStarted" {
+	): "inProgress" | "abandoned" | "planned" | "notStarted" {
 		const inProgressMarks =
-			this.plugin?.settings.taskStatuses.inProgress.split("|");
+			this.plugin?.settings.taskStatuses.inProgress?.split("|") || [
+				"-",
+				"/",
+			];
 		if (inProgressMarks.includes(mark)) {
 			return "inProgress";
 		}
 
 		const abandonedMarks =
-			this.plugin?.settings.taskStatuses.abandoned.split("|");
+			this.plugin?.settings.taskStatuses.abandoned?.split("|") || [">"];
 		if (abandonedMarks.includes(mark)) {
 			return "abandoned";
 		}
 
-		return "notStarted";
+		const plannedMarks = this.plugin?.settings.taskStatuses.planned?.split(
+			"|"
+		) || ["?"];
+		if (plannedMarks.includes(mark)) {
+			return "planned";
+		}
+
+		// If the mark doesn't match any specific category, use the countOtherStatusesAs setting
+		return (
+			(this.plugin?.settings.countOtherStatusesAs as
+				| "inProgress"
+				| "abandoned"
+				| "notStarted"
+				| "planned") || "notStarted"
+		);
+	}
+
+	determineTaskStatusFromDataTask(
+		dataTask: string
+	): "completed" | "inProgress" | "abandoned" | "planned" | "notStarted" {
+		const completedMarks =
+			this.plugin?.settings.taskStatuses.completed?.split("|") || [
+				"x",
+				"X",
+			];
+		if (completedMarks.includes(dataTask)) {
+			return "completed";
+		}
+
+		const inProgressMarks =
+			this.plugin?.settings.taskStatuses.inProgress?.split("|") || [
+				"-",
+				"/",
+			];
+
+		if (inProgressMarks.includes(dataTask)) {
+			return "inProgress";
+		}
+
+		const abandonedMarks =
+			this.plugin?.settings.taskStatuses.abandoned?.split("|") || [">"];
+		if (abandonedMarks.includes(dataTask)) {
+			return "abandoned";
+		}
+
+		const plannedMarks = this.plugin?.settings.taskStatuses.planned?.split(
+			"|"
+		) || ["?"];
+		if (plannedMarks.includes(dataTask)) {
+			return "planned";
+		}
+
+		// If not matching any specific status, check if it's a not-started mark
+		const notStartedMarks =
+			this.plugin?.settings.taskStatuses.notStarted?.split("|") || [" "];
+		if (notStartedMarks.includes(dataTask)) {
+			return "notStarted";
+		}
+
+		// If the mark doesn't match any specific category, use the countOtherStatusesAs setting
+		return (
+			(this.plugin?.settings.countOtherStatusesAs as
+				| "inProgress"
+				| "abandoned"
+				| "notStarted"
+				| "planned") || "notStarted"
+		);
 	}
 
 	determineTaskStatus(
 		mark: string
-	): "completed" | "inProgress" | "abandoned" | "notStarted" {
+	): "completed" | "inProgress" | "abandoned" | "planned" | "notStarted" {
 		const completedMarks =
 			this.plugin?.settings.taskStatuses.completed.split("|");
 		if (completedMarks.includes(mark)) {
@@ -213,26 +768,57 @@ class ProgressBar extends Component {
 		}
 
 		const inProgressMarks =
-			this.plugin?.settings.taskStatuses.inProgress.split("|");
+			this.plugin?.settings.taskStatuses.inProgress?.split("|");
 		if (inProgressMarks.includes(mark)) {
 			return "inProgress";
 		}
 
 		const abandonedMarks =
-			this.plugin?.settings.taskStatuses.abandoned.split("|");
+			this.plugin?.settings.taskStatuses.abandoned?.split("|");
 		if (abandonedMarks.includes(mark)) {
 			return "abandoned";
 		}
 
+		const plannedMarks =
+			this.plugin?.settings.taskStatuses.planned?.split("|");
+		if (plannedMarks.includes(mark)) {
+			return "planned";
+		}
+
 		// If not matching any specific status, check if it's a not-started mark
 		const notStartedMarks =
-			this.plugin?.settings.taskStatuses.notStarted.split("|");
+			this.plugin?.settings.taskStatuses.notStarted?.split("|");
 		if (notStartedMarks.includes(mark)) {
 			return "notStarted";
 		}
 
 		// Default fallback - any unrecognized mark is considered not started
 		return "notStarted";
+	}
+
+	isCompletedTaskFromDataTask(dataTask: string): boolean {
+		// Priority 1: If useOnlyCountMarks is enabled, only count tasks with specified marks
+		if (this.plugin?.settings.useOnlyCountMarks) {
+			const onlyCountMarks =
+				this.plugin?.settings.onlyCountTaskMarks.split("|");
+			return onlyCountMarks.includes(dataTask);
+		}
+
+		// Priority 2: If the mark is in excludeTaskMarks, don't count it
+		if (
+			this.plugin?.settings.excludeTaskMarks &&
+			this.plugin.settings.excludeTaskMarks.includes(dataTask)
+		) {
+			return false;
+		}
+
+		// Priority 3: Check against the task statuses
+		// We consider a task "completed" if it has a mark from the "completed" status
+		const completedMarks =
+			this.plugin?.settings.taskStatuses.completed.split("|");
+
+		// Return true if the mark is in the completedMarks array
+		return completedMarks.includes(dataTask);
 	}
 
 	isCompletedTask(text: string): boolean {
@@ -271,8 +857,21 @@ class ProgressBar extends Component {
 		let completed = 0;
 		let inProgress = 0;
 		let abandoned = 0;
+		let planned = 0;
 		let notStarted = 0;
 		let total = 0;
+
+		// Get all parent-child relationships to check for indentation
+		const parentChildMap = new Map<HTMLElement, HTMLElement[]>();
+		for (let element of this.group.childrenElement) {
+			const parent = element.parentElement;
+			if (parent) {
+				if (!parentChildMap.has(parent)) {
+					parentChildMap.set(parent, []);
+				}
+				parentChildMap.get(parent)?.push(element);
+			}
+		}
 
 		for (let element of this.group.childrenElement) {
 			const checkboxElement = element.querySelector(
@@ -280,86 +879,225 @@ class ProgressBar extends Component {
 			);
 			if (!checkboxElement) continue;
 
-			// For dataview, we need to check the text content
-			const textContent = element.textContent?.trim() || "";
+			// Skip if this is a sublevel task and countSubLevel is disabled
+			if (!this.plugin?.settings.countSubLevel) {
+				// Check if this task is a subtask by examining its position and parent-child relationships
+				const parent = element.parentElement;
+				if (parent && parent.classList.contains("task-list-item")) {
+					// This is a subtask (nested under another task), so skip it
+					continue;
+				}
+
+				// If this is a heading progress bar, only count top-level tasks
+				if (
+					this.group.parentElement.matches("h1, h2, h3, h4, h5, h6")
+				) {
+					// Get indentation by checking the DOM structure or task content
+					const liElement = element.closest("li");
+					if (liElement) {
+						const parentList = liElement.parentElement;
+						const grandParentListItem =
+							parentList?.parentElement?.closest("li");
+						if (grandParentListItem) {
+							// This is a nested task, so skip it
+							continue;
+						}
+					}
+				}
+			}
 
 			total++;
 
-			// Extract the task mark
-			const markMatch = textContent.match(/\[(.)]/);
-			if (markMatch && markMatch[1]) {
-				const status = this.getTaskStatus(textContent);
+			// First try to get status from data-task attribute
+			const dataTask = element.getAttribute("data-task");
+			if (dataTask) {
+				const status = this.getTaskStatusFromDataTask(dataTask);
 
-				// Count based on status
-				if (this.isCompletedTask(textContent)) {
+				if (this.isCompletedTaskFromDataTask(dataTask)) {
 					completed++;
 				} else if (status === "inProgress") {
 					inProgress++;
 				} else if (status === "abandoned") {
 					abandoned++;
+				} else if (status === "planned") {
+					planned++;
 				} else if (status === "notStarted") {
 					notStarted++;
 				}
 			} else {
-				// Fallback to checking if the checkbox is checked
+				// Fallback to the text content method
+				const textContent = element.textContent?.trim() || "";
+				// Extract the task mark
+				const markMatch = textContent.match(/\[(.)]/);
+				if (markMatch && markMatch[1]) {
+					const status = this.getTaskStatus(textContent);
+
+					// Count based on status
+					if (this.isCompletedTask(textContent)) {
+						completed++;
+					} else if (status === "inProgress") {
+						inProgress++;
+					} else if (status === "abandoned") {
+						abandoned++;
+					} else if (status === "planned") {
+						planned++;
+					} else if (status === "notStarted") {
+						notStarted++;
+					}
+				} else {
+					// Fallback to checking if the checkbox is checked
+					const checkbox = checkboxElement as HTMLInputElement;
+					if (checkbox.checked) {
+						completed++;
+					} else {
+						notStarted++;
+					}
+				}
+			}
+		}
+
+		this.completed = completed;
+		this.inProgress = inProgress;
+		this.abandoned = abandoned;
+		this.planned = planned;
+		this.notStarted = notStarted;
+		this.total = total;
+	}
+
+	countTasks(allTasks: HTMLElement[]) {
+		let completed = 0;
+		let inProgress = 0;
+		let abandoned = 0;
+		let planned = 0;
+		let notStarted = 0;
+		let total = 0;
+
+		for (let element of allTasks) {
+			const checkboxElement = element.querySelector(
+				".task-list-item-checkbox"
+			);
+			if (!checkboxElement) continue;
+
+			// First try to get status from data-task attribute
+			const dataTask = element.getAttribute("data-task");
+			if (dataTask) {
+				const status = this.getTaskStatusFromDataTask(dataTask);
+
+				if (this.isCompletedTaskFromDataTask(dataTask)) {
+					completed++;
+				} else if (status === "inProgress") {
+					inProgress++;
+				} else if (status === "abandoned") {
+					abandoned++;
+				} else if (status === "planned") {
+					planned++;
+				} else if (status === "notStarted") {
+					notStarted++;
+				}
+			} else {
+				// Fallback to the text content method
+				const textContent = element.textContent?.trim() || "";
 				const checkbox = checkboxElement as HTMLInputElement;
-				if (checkbox.checked) {
+
+				// Extract the task mark
+				const markMatch = textContent.match(/\[(.)]/);
+				if (markMatch && markMatch[1]) {
+					const status = this.getTaskStatus(textContent);
+
+					// Count based on status
+					if (this.isCompletedTask(textContent)) {
+						completed++;
+					} else if (status === "inProgress") {
+						inProgress++;
+					} else if (status === "abandoned") {
+						abandoned++;
+					} else if (status === "planned") {
+						planned++;
+					} else if (status === "notStarted") {
+						notStarted++;
+					}
+				} else if (checkbox.checked) {
 					completed++;
 				} else {
 					notStarted++;
 				}
 			}
+
+			total++;
 		}
 
-		this.completed = completed;
-		this.inProgress = inProgress;
-		this.abandoned = abandoned;
-		this.notStarted = notStarted;
-		this.total = total;
+		return { completed, inProgress, abandoned, planned, notStarted, total };
 	}
 
 	updateCompletedAndTotal() {
-		let completed = 0;
-		let inProgress = 0;
-		let abandoned = 0;
-		let notStarted = 0;
 		let total = 0;
 
+		// Get all parent-child relationships to check for indentation
+		const parentChildMap = new Map<HTMLElement, HTMLElement[]>();
+		for (let element of this.group.childrenElement) {
+			const parent = element.parentElement;
+			if (parent) {
+				if (!parentChildMap.has(parent)) {
+					parentChildMap.set(parent, []);
+				}
+				parentChildMap.get(parent)?.push(element);
+			}
+		}
+
+		const allTasks: HTMLElement[] = [];
+
+		// Check if the element is a top-level task or if countSubLevel is enabled
 		for (let element of this.group.childrenElement) {
 			const checkboxElement = element.querySelector(
 				".task-list-item-checkbox"
 			);
 			if (!checkboxElement) continue;
 
-			const checkbox = checkboxElement as HTMLInputElement;
-			const textContent = element.textContent?.trim() || "";
+			allTasks.push(element);
 
-			// Extract the task mark
-			const markMatch = textContent.match(/\[(.)]/);
+			// Skip if this is a sublevel task and countSubLevel is disabled
+			if (!this.plugin?.settings.countSubLevel) {
+				// Check if this task is a subtask by examining its position and parent-child relationships
+				const parent = element.parentElement;
+				if (parent && parent.classList.contains("task-list-item")) {
+					// This is a subtask (nested under another task), so skip it
+					continue;
+				}
+
+				// If this is a heading progress bar, only count top-level tasks
+				if (
+					this.group.parentElement.matches("h1, h2, h3, h4, h5, h6")
+				) {
+					// Get indentation by checking the DOM structure or task content
+					const liElement = element.closest("li");
+					if (liElement) {
+						const parentList = liElement.parentElement;
+						const grandParentListItem =
+							parentList?.parentElement?.closest("li");
+						if (grandParentListItem) {
+							// This is a nested task, so skip it
+							continue;
+						}
+					}
+				}
+			} else if (this.plugin?.settings.countSubLevel) {
+				const childrenTasks = element.findAll(".task-list-item");
+				for (let child of childrenTasks) {
+					total++;
+					allTasks.push(child);
+				}
+			}
 
 			total++;
-
-			if (markMatch && markMatch[1]) {
-				const status = this.getTaskStatus(textContent);
-
-				// Count based on status
-				if (this.isCompletedTask(textContent)) {
-					completed++;
-				} else if (status === "inProgress") {
-					inProgress++;
-				} else if (status === "abandoned") {
-					abandoned++;
-				} else if (status === "notStarted") {
-					notStarted++;
-				}
-			} else if (checkbox.checked) {
-				completed++;
-			}
 		}
+
+		const { completed, inProgress, abandoned, planned, notStarted } =
+			this.countTasks(allTasks);
 
 		this.completed = completed;
 		this.inProgress = inProgress;
 		this.abandoned = abandoned;
+		this.planned = planned;
 		this.notStarted = notStarted;
 		this.total = total;
 	}
@@ -373,6 +1111,8 @@ class ProgressBar extends Component {
 			Math.round((this.inProgress / this.total) * 10000) / 100;
 		const abandonedPercentage =
 			Math.round((this.abandoned / this.total) * 10000) / 100;
+		const plannedPercentage =
+			Math.round((this.planned / this.total) * 10000) / 100;
 
 		// Set the completed part
 		this.progressEl.style.width = completedPercentage + "%";
@@ -388,6 +1128,16 @@ class ProgressBar extends Component {
 			this.abandonedEl.style.width = abandonedPercentage + "%";
 			this.abandonedEl.style.left =
 				completedPercentage + inProgressPercentage + "%";
+		}
+
+		// Set the planned part (if it exists)
+		if (this.plannedEl) {
+			this.plannedEl.style.width = plannedPercentage + "%";
+			this.plannedEl.style.left =
+				completedPercentage +
+				inProgressPercentage +
+				abandonedPercentage +
+				"%";
 		}
 
 		// Update the class based on progress percentage
@@ -421,6 +1171,9 @@ class ProgressBar extends Component {
 		if (abandonedPercentage > 0) {
 			progressClass += " has-abandoned";
 		}
+		if (plannedPercentage > 0) {
+			progressClass += " has-planned";
+		}
 
 		this.progressEl.className = progressClass;
 	}
@@ -435,8 +1188,12 @@ class ProgressBar extends Component {
 				text = `${percentage}%`;
 			} else {
 				// Show detailed counts if we have in-progress or abandoned tasks
-				if (this.inProgress > 0 || this.abandoned > 0) {
-					text = `[${this.completed}✓ ${this.inProgress}⟳ ${this.abandoned}✗ / ${this.total}]`;
+				if (
+					this.inProgress > 0 ||
+					this.abandoned > 0 ||
+					this.planned > 0
+				) {
+					text = `[${this.completed}✓ ${this.inProgress}⟳ ${this.abandoned}✗ ${this.planned}? / ${this.total}]`;
 				} else {
 					text = `[${this.completed}/${this.total}]`;
 				}
@@ -483,6 +1240,12 @@ class ProgressBar extends Component {
 			});
 		}
 
+		if (this.planned > 0) {
+			this.plannedEl = this.progressBackGroundEl.createEl("div", {
+				cls: "progress-bar-inline progress-planned",
+			});
+		}
+
 		if (this.plugin?.settings.addNumberToProgressBar && this.total) {
 			let text;
 			if (this.plugin?.settings.showPercentage) {
@@ -491,8 +1254,12 @@ class ProgressBar extends Component {
 				text = `${percentage}%`;
 			} else {
 				// Show detailed counts if we have in-progress or abandoned tasks
-				if (this.inProgress > 0 || this.abandoned > 0) {
-					text = `[${this.completed}✓ ${this.inProgress}⟳ ${this.abandoned}✗ / ${this.total}]`;
+				if (
+					this.inProgress > 0 ||
+					this.abandoned > 0 ||
+					this.planned > 0
+				) {
+					text = `[${this.completed}✓ ${this.inProgress}⟳ ${this.abandoned}✗ ${this.planned}? / ${this.total}]`;
 				} else {
 					text = `[${this.completed}/${this.total}]`;
 				}

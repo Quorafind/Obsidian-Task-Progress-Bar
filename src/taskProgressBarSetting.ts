@@ -4,8 +4,10 @@ import { allStatusCollections } from "./task-status";
 
 export interface TaskProgressBarSettings {
 	addTaskProgressBarToHeading: boolean;
+	enableHeadingProgressBar: boolean;
 	addNumberToProgressBar: boolean;
 	showPercentage: boolean;
+	autoCompleteParent: boolean;
 	countSubLevel: boolean;
 	hideProgressBarBasedOnConditions: boolean;
 	hideProgressBarTags: string;
@@ -31,7 +33,9 @@ export interface TaskProgressBarSettings {
 
 export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	addTaskProgressBarToHeading: false,
+	enableHeadingProgressBar: false,
 	addNumberToProgressBar: false,
+	autoCompleteParent: false,
 	showPercentage: false,
 	countSubLevel: true,
 	hideProgressBarBasedOnConditions: false,
@@ -91,6 +95,34 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.addTaskProgressBarToHeading =
 							value;
+						this.applySettingsUpdate();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Enable heading progress bars")
+			.setDesc(
+				"Add progress bars to headings to show progress of all tasks under that heading."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enableHeadingProgressBar)
+					.onChange(async (value) => {
+						this.plugin.settings.enableHeadingProgressBar = value;
+						this.applySettingsUpdate();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Auto complete parent task")
+			.setDesc(
+				"Toggle this to allow this plugin to auto complete parent task when all child tasks are completed."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.autoCompleteParent)
+					.onChange(async (value) => {
+						this.plugin.settings.autoCompleteParent = value;
 						this.applySettingsUpdate();
 					})
 			);
@@ -236,6 +268,22 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.taskStatuses.completed =
 							value || DEFAULT_SETTINGS.taskStatuses.completed;
+						this.applySettingsUpdate();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Planned task markers")
+			.setDesc(
+				'Characters in square brackets that represent planned tasks. Example: "?"'
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.taskStatuses.planned)
+					.setValue(this.plugin.settings.taskStatuses.planned)
+					.onChange(async (value) => {
+						this.plugin.settings.taskStatuses.planned =
+							value || DEFAULT_SETTINGS.taskStatuses.planned;
 						this.applySettingsUpdate();
 					})
 			);

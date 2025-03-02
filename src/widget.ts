@@ -773,7 +773,6 @@ export function taskProgressBarExtension(
 				| "notStarted"
 				| "planned" {
 				const markMatch = text.match(/\[(.)]/);
-				console.log(markMatch, text);
 				if (!markMatch || !markMatch[1]) {
 					return "notStarted";
 				}
@@ -997,17 +996,7 @@ export function taskProgressBarExtension(
 					tabSize
 				);
 
-				const bulletCompleteRegex = this.createCompletedTaskRegex(
-					plugin,
-					false,
-					level,
-					tabSize
-				);
 				const headingTotalRegex = this.createTotalTaskRegex(true);
-				const headingCompleteRegex = this.createCompletedTaskRegex(
-					plugin,
-					true
-				);
 
 				// Count tasks
 				for (let i = 0; i < textArray.length; i++) {
@@ -1114,29 +1103,6 @@ export function taskProgressBarExtension(
 							}
 						}
 					}
-				}
-
-				// Log debug information
-				if (taskDebug.length > 0) {
-					console.log("Task counting debug:", {
-						taskDebug,
-						completedCount: completed,
-						inProgressCount: inProgress,
-						abandonedCount: abandoned,
-						notStartedCount: notStarted,
-						plannedCount: planned,
-						totalCount: total,
-						settings: {
-							useOnlyCountMarks:
-								plugin?.settings.useOnlyCountMarks,
-							onlyCountTaskMarks:
-								plugin?.settings.onlyCountTaskMarks,
-							excludeTaskMarks: plugin?.settings.excludeTaskMarks,
-							taskStatuses: plugin?.settings.taskStatuses,
-							countOtherStatusesAs:
-								plugin?.settings.countOtherStatusesAs,
-						},
-					});
 				}
 
 				// Ensure counts don't exceed total

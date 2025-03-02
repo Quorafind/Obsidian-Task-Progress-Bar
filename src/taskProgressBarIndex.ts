@@ -19,6 +19,7 @@ import {
 	TaskProgressBarSettingTab,
 } from "./taskProgressBarSetting";
 import { EditorView } from "@codemirror/view";
+import { autoCompleteParentExtension } from "./autoCompleteParent";
 
 class TaskProgressBarPopover extends HoverPopover {
 	plugin: TaskProgressBarPlugin;
@@ -103,13 +104,24 @@ export default class TaskProgressBarPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.addSettingTab(new TaskProgressBarSettingTab(this.app, this));
-		this.registerEditorExtension(taskProgressBarExtension(this.app, this));
+		this.registerEditorExtension([
+			taskProgressBarExtension(this.app, this),
+
+		]);
 		this.registerMarkdownPostProcessor((el, ctx) => {
 			updateProgressBarInElement({
 				plugin: this,
 				element: el,
 				ctx: ctx,
 			});
+		});
+
+		this.app.workspace.onLayoutReady(() => {
+			if (this.settings.autoCompleteParent) {
+				this.registerEditorExtension([
+					autoCompleteParentExtension(this.app),
+				]);
+			}
 		});
 	}
 

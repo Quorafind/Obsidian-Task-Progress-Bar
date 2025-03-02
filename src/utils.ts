@@ -1,8 +1,12 @@
 import { EditorView } from "@codemirror/view";
 
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
-import { editorInfoField, MarkdownPostProcessorContext, TFile } from "obsidian";
-
+import {
+	App,
+	editorInfoField,
+	MarkdownPostProcessorContext,
+	TFile,
+} from "obsidian";
 
 // Helper function to check if progress bars should be hidden
 export function shouldHideProgressBarInPreview(
@@ -14,7 +18,7 @@ export function shouldHideProgressBarInPreview(
 	}
 
 	const abstractFile = ctx.sourcePath
-		? plugin.app.vault.getAbstractFileByPath(ctx.sourcePath)
+		? plugin.app.vault.getFileByPath(ctx.sourcePath)
 		: null;
 	if (!abstractFile) {
 		return false;
@@ -138,4 +142,22 @@ export function shouldHideProgressBarInLivePriview(
 	}
 
 	return false;
+}
+
+/**
+ * Get tab size from vault configuration
+ */
+export function getTabSize(app: App): number {
+	try {
+		const vaultConfig = app.vault as any;
+		const useTab =
+			vaultConfig.getConfig?.("useTab") === undefined ||
+			vaultConfig.getConfig?.("useTab") === true;
+		return useTab
+			? (vaultConfig.getConfig?.("tabSize") || 4) / 4
+			: vaultConfig.getConfig?.("tabSize") || 4;
+	} catch (e) {
+		console.error("Error getting tab size:", e);
+		return 4; // Default tab size
+	}
 }
