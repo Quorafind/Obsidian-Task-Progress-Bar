@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-task-progress-bar",
 	"name": "Task Progress Bar",
-	"version": "3.0.0",
+	"version": "3.0.1",
 	"minAppVersion": "0.15.2",
 	"description": "A task progress bar plugin for tasks in Obsidian.",
 	"author": "Boninall",

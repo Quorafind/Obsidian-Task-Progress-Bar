@@ -143,6 +143,7 @@ export function updateProgressBarInElement({
 	// Handle heading elements directly
 	if (
 		plugin.settings.enableHeadingProgressBar &&
+		element.children[0] &&
 		element.children[0].matches("h1, h2, h3, h4, h5, h6")
 	) {
 		// Skip if this heading already has a progress bar
