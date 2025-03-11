@@ -168,17 +168,23 @@ class TaskProgressBarWidget extends WidgetType {
 				// Calculate percentage of completed tasks
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				
+
 				// Check if custom progress ranges are enabled
 				if (this.plugin?.settings.customizeProgressRanges) {
 					// Find a matching range for the current percentage
-					const matchingRange = this.plugin.settings.progressRanges.find(
-						range => percentage >= range.min && percentage <= range.max
-					);
-					
+					const matchingRange =
+						this.plugin.settings.progressRanges.find(
+							(range) =>
+								percentage >= range.min &&
+								percentage <= range.max
+						);
+
 					// If a matching range is found, use its custom text
 					if (matchingRange) {
-						text = matchingRange.text.replace("{{PROGRESS}}", percentage.toString());
+						text = matchingRange.text.replace(
+							"{{PROGRESS}}",
+							percentage.toString()
+						);
 					} else {
 						text = `${percentage}%`;
 					}
@@ -257,6 +263,11 @@ class TaskProgressBarWidget extends WidgetType {
 			cls: "progress-bar-inline-background",
 		});
 
+		this.progressBackGroundEl.toggleClass(
+			"hidden",
+			!this.plugin?.settings.showProgressBar
+		);
+
 		// Create elements for each status type
 		this.progressEl = this.progressBackGroundEl.createEl("div", {
 			cls: "progress-bar-inline progress-completed",
@@ -286,17 +297,23 @@ class TaskProgressBarWidget extends WidgetType {
 			if (this.plugin?.settings.showPercentage) {
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				
+
 				// Check if custom progress ranges are enabled
 				if (this.plugin?.settings.customizeProgressRanges) {
 					// Find a matching range for the current percentage
-					const matchingRange = this.plugin.settings.progressRanges.find(
-						range => percentage >= range.min && percentage <= range.max
-					);
-					
+					const matchingRange =
+						this.plugin.settings.progressRanges.find(
+							(range) =>
+								percentage >= range.min &&
+								percentage <= range.max
+						);
+
 					// If a matching range is found, use its custom text
 					if (matchingRange) {
-						text = matchingRange.text.replace("{{PROGRESS}}", percentage.toString());
+						text = matchingRange.text.replace(
+							"{{PROGRESS}}",
+							percentage.toString()
+						);
 					} else {
 						text = `${percentage}%`;
 					}
