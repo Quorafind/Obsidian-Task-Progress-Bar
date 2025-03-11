@@ -6,6 +6,8 @@ import {
 	TransactionSpec,
 } from "@codemirror/state";
 import { getTabSize } from "./utils";
+import { STATE_MARK_MAP, TaskState } from "./taskStatusSwitcher";
+import TaskProgressBarPlugin from "./taskProgressBarIndex";
 
 /**
  * Creates an editor extension that automatically completes parent tasks when all child tasks are completed
@@ -13,9 +15,12 @@ import { getTabSize } from "./utils";
  * @param plugin The plugin instance
  * @returns An editor extension that can be registered with the plugin
  */
-export function autoCompleteParentExtension(app: App) {
+export function autoCompleteParentExtension(
+	app: App,
+	plugin: TaskProgressBarPlugin
+) {
 	return EditorState.transactionFilter.of((tr) => {
-		return handleAutoCompleteParentTransaction(tr, app);
+		return handleAutoCompleteParentTransaction(tr, app, plugin);
 	});
 }
 
@@ -28,23 +33,30 @@ export function autoCompleteParentExtension(app: App) {
  */
 export function handleAutoCompleteParentTransaction(
 	tr: Transaction,
-	app: App
+	app: App,
+	plugin: TaskProgressBarPlugin
 ): TransactionSpec {
 	// Only process transactions that change the document and are user input events
 	if (!tr.docChanged) {
 		return tr;
 	}
 
-	// Check if a task was completed in this transaction
-	const taskCompletionInfo = findTaskCompletion(tr);
-	if (!taskCompletionInfo) {
+	// Check if a task status was changed in this transaction
+	const taskStatusChangeInfo = findTaskStatusChange(tr, plugin);
+	if (!taskStatusChangeInfo) {
 		return tr;
 	}
 
-	// Check if the completed task has a parent task
-	const { doc, lineNumber } = taskCompletionInfo;
+	// Check if the changed task has a parent task
+	const { doc, lineNumber, newStatus } = taskStatusChangeInfo;
 	const parentInfo = findParentTask(doc, lineNumber);
 	if (!parentInfo) {
+		return tr;
+	}
+
+	// Only proceed if the new status is a "completed" status
+	const { cycle, marks } = getStatusConfig(plugin);
+	if (!isCompletedStatus(newStatus, cycle, marks, plugin)) {
 		return tr;
 	}
 
@@ -53,27 +65,81 @@ export function handleAutoCompleteParentTransaction(
 		doc,
 		parentInfo.lineNumber,
 		parentInfo.indentationLevel,
-		app
+		app,
+		plugin
 	);
 
 	// If all siblings are completed, update the parent task
 	if (allSiblingsCompleted) {
-		return completeParentTask(tr, parentInfo.lineNumber, doc);
+		return completeParentTask(tr, parentInfo.lineNumber, doc, plugin);
 	}
 
 	return tr;
 }
 
 /**
- * Finds a task completion event in the transaction
- * @param tr The transaction to check
- * @returns Information about the completed task or null if no task was completed
+ * Gets the current task status configuration
+ * @param plugin The plugin instance
+ * @returns The cycle and marks configuration
  */
-function findTaskCompletion(tr: Transaction): {
+function getStatusConfig(plugin: TaskProgressBarPlugin) {
+	// If task status switcher is enabled, use those settings
+	if (plugin.settings.enableTaskStatusSwitcher) {
+		return {
+			cycle: plugin.settings.taskStatusCycle,
+			marks: plugin.settings.taskStatusMarks,
+		};
+	}
+
+	// Otherwise, use the default configuration
+	return {
+		cycle: Object.keys(STATE_MARK_MAP),
+		marks: STATE_MARK_MAP,
+	};
+}
+
+/**
+ * Determines if a status is considered "completed"
+ * @param status The status to check
+ * @param cycle The task status cycle
+ * @param marks The task status marks
+ * @param plugin The plugin instance
+ * @returns True if the status is considered "completed"
+ */
+function isCompletedStatus(
+	status: string,
+	cycle: string[],
+	marks: Record<string, string>,
+	plugin: TaskProgressBarPlugin
+): boolean {
+	// If using cycle/status system
+	if (plugin.settings.enableTaskStatusSwitcher) {
+		// Consider the last status in the cycle as "completed"
+		// This is typically the DONE status
+		return status === cycle[cycle.length - 1];
+	}
+
+	// If not using the cycle system, check against the completed task statuses
+	const completedMarks = plugin.settings.taskStatuses.completed.split("|");
+	return completedMarks.includes(status);
+}
+
+/**
+ * Finds a task status change event in the transaction
+ * @param tr The transaction to check
+ * @param plugin The plugin instance
+ * @returns Information about the task with changed status or null if no task status was changed
+ */
+function findTaskStatusChange(
+	tr: Transaction,
+	plugin: TaskProgressBarPlugin
+): {
 	doc: Text;
 	lineNumber: number;
+	newStatus: string;
 } | null {
-	let taskCompletedLine: number | null = null;
+	let taskChangedLine: number | null = null;
+	let newStatus: string = "";
 
 	// Check each change in the transaction
 	tr.changes.iterChanges(
@@ -84,36 +150,40 @@ function findTaskCompletion(tr: Transaction): {
 			toB: number,
 			inserted: Text
 		) => {
-			// If a change involves inserting an 'x' character
 			const insertedText = inserted.toString();
-			console.log(insertedText);
+
+			// Check if this might be a task status change
+			// Check for both single character changes and full task insertion
 			if (
-				insertedText === "x" ||
-				insertedText === "X" ||
-				insertedText.trim() === "- [x]"
+				insertedText.length === 1 || // Single character change (clicking)
+				insertedText.trim().startsWith("- [") // Full task insertion (shortcut)
 			) {
 				// Get the position context
 				const pos = fromB;
 				const line = tr.newDoc.lineAt(pos);
 				const lineText = line.text;
 
-				// Check if this is a task being completed ([ ] to [x])
-				// Matches the pattern where the cursor is between [ and ]
-				const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[[x|X]\]/i;
-				if (taskRegex.test(lineText)) {
-					taskCompletedLine = line.number;
+				// Check if this is a task line
+				const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[(.)]/i;
+				const taskMatch = lineText.match(taskRegex);
+
+				if (taskMatch) {
+					// This is a task line with a status marker
+					taskChangedLine = line.number;
+					newStatus = taskMatch[2]; // The character inside the brackets
 				}
 			}
 		}
 	);
 
-	if (taskCompletedLine === null) {
+	if (taskChangedLine === null) {
 		return null;
 	}
 
 	return {
 		doc: tr.newDoc,
-		lineNumber: taskCompletedLine,
+		lineNumber: taskChangedLine,
+		newStatus: newStatus,
 	};
 }
 
@@ -160,7 +230,7 @@ function findParentTask(
 		// If this line has less indentation than the current line
 		if (indentLevel < currentIndentLevel) {
 			// Check if it's a task
-			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[([ |x|X])\]/i;
+			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[(.)]/i;
 			if (taskRegex.test(lineText)) {
 				return {
 					lineNumber: i,
@@ -178,20 +248,25 @@ function findParentTask(
 
 	return null;
 }
+
 /**
  * Checks if all sibling tasks at the same indentation level as the parent's children are completed
  * @param doc The document to check
  * @param parentLineNumber The line number of the parent task
  * @param parentIndentLevel The indentation level of the parent task
+ * @param app The Obsidian app instance
+ * @param plugin The plugin instance
  * @returns True if all siblings are completed, false otherwise
  */
 function areAllSiblingsCompleted(
 	doc: Text,
 	parentLineNumber: number,
 	parentIndentLevel: number,
-	app: App
+	app: App,
+	plugin: TaskProgressBarPlugin
 ): boolean {
 	const tabSize = getTabSize(app);
+	const { cycle, marks } = getStatusConfig(plugin);
 
 	// The expected indentation level for child tasks
 	const childIndentLevel = parentIndentLevel + tabSize;
@@ -232,7 +307,9 @@ function areAllSiblingsCompleted(
 
 				// If we find an incomplete task, return false
 				const taskStatus = taskMatch[2];
-				if (taskStatus !== "x" && taskStatus !== "X") {
+
+				// Check if this task is considered completed
+				if (!isCompletedStatus(taskStatus, cycle, marks, plugin)) {
 					return false;
 				}
 			}
@@ -248,39 +325,57 @@ function areAllSiblingsCompleted(
  * @param tr The transaction to modify
  * @param parentLineNumber The line number of the parent task
  * @param doc The document
+ * @param plugin The plugin instance
  * @returns The modified transaction
  */
 function completeParentTask(
 	tr: Transaction,
 	parentLineNumber: number,
-	doc: Text
+	doc: Text,
+	plugin: TaskProgressBarPlugin
 ): TransactionSpec {
 	const parentLine = doc.line(parentLineNumber);
 	const parentLineText = parentLine.text;
+	const { cycle, marks } = getStatusConfig(plugin);
 
 	// Find the task marker position
 	const taskMarkerMatch = parentLineText.match(
-		/^[\s|\t]*([-*+]|\d+\.)\s\[( )\]/
+		/^[\s|\t]*([-*+]|\d+\.)\s\[(.)\]/
 	);
 	if (!taskMarkerMatch) {
 		return tr;
 	}
 
-	// Calculate the position where we need to insert 'x'
+	// Get the current mark and position
+	const currentMark = taskMarkerMatch[2];
 	const markerStart =
 		parentLine.from +
 		taskMarkerMatch.index! +
-		taskMarkerMatch[0].indexOf("[ ]") +
+		taskMarkerMatch[0].indexOf(`[${currentMark}]`) +
 		1;
 
-	// Create a new transaction that adds the completion marker 'x' to the parent task
+	// Determine which mark to use for completion
+	let completionMark: string;
+
+	if (plugin.settings.enableTaskStatusSwitcher) {
+		// Use the last mark in the cycle (usually "completed" state)
+		const lastState = cycle[cycle.length - 1];
+		completionMark = marks[lastState] || "x";
+	} else {
+		// Use the first mark in the completed list
+		const completedMarks =
+			plugin.settings.taskStatuses.completed.split("|");
+		completionMark = completedMarks[0] || "x";
+	}
+
+	// Create a new transaction that updates the parent task mark
 	return {
 		changes: [
 			tr.changes,
 			{
 				from: markerStart,
 				to: markerStart + 1,
-				insert: "x",
+				insert: completionMark,
 			},
 		],
 		selection: tr.selection,
