@@ -1,9 +1,10 @@
 import { App, PluginSettingTab, Setting, Modal } from "obsidian";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
 import { allStatusCollections } from "./task-status";
-import { STATE_MARK_MAP, TaskState } from "./task-status-switcher";
+import { STATE_MARK_MAP, TaskState } from "./taskStatusSwitcher";
 
 export interface TaskProgressBarSettings {
+	showProgressBar: boolean;
 	addTaskProgressBarToHeading: boolean;
 	enableHeadingProgressBar: boolean;
 	addNumberToProgressBar: boolean;
@@ -46,6 +47,7 @@ export interface TaskProgressBarSettings {
 }
 
 export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
+	showProgressBar: false,
 	addTaskProgressBarToHeading: false,
 	enableHeadingProgressBar: false,
 	addNumberToProgressBar: false,
@@ -117,6 +119,18 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		containerEl.createEl("h2", { text: "📍 Task Progress Bar" });
+
+		new Setting(containerEl)
+			.setName("Show progress bar")
+			.setDesc("Toggle this to show the progress bar.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.showProgressBar)
+					.onChange(async (value) => {
+						this.plugin.settings.showProgressBar = value;
+						this.applySettingsUpdate();
+					})
+			);
 
 		new Setting(containerEl)
 			.setName("Add progress bar to Heading")

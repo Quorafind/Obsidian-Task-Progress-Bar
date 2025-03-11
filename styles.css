@@ -153,6 +153,10 @@
 	overflow: hidden;
 }
 
+.progress-bar-inline-background.hidden {
+	display: none;
+}
+
 /* Status indicators in the task number display */
 .cm-task-progress-bar .task-status-indicator {
 	display: inline-block;

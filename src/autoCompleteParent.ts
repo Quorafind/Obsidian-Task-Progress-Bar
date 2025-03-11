@@ -86,12 +86,16 @@ function findTaskCompletion(tr: Transaction): {
 		) => {
 			// If a change involves inserting an 'x' character
 			const insertedText = inserted.toString();
-			if (insertedText === "x" || insertedText === "X") {
+			console.log(insertedText);
+			if (
+				insertedText === "x" ||
+				insertedText === "X" ||
+				insertedText.trim() === "- [x]"
+			) {
 				// Get the position context
 				const pos = fromB;
 				const line = tr.newDoc.lineAt(pos);
 				const lineText = line.text;
-				console.log(lineText);
 
 				// Check if this is a task being completed ([ ] to [x])
 				// Matches the pattern where the cursor is between [ and ]

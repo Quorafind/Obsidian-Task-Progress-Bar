@@ -14,7 +14,7 @@ import {
 } from "./taskProgressBarSetting";
 import { EditorView } from "@codemirror/view";
 import { autoCompleteParentExtension } from "./autoCompleteParent";
-import { taskStatusSwitcherExtension } from "./task-status-switcher";
+import { taskStatusSwitcherExtension } from "./taskStatusSwitcher";
 
 class TaskProgressBarPopover extends HoverPopover {
 	plugin: TaskProgressBarPlugin;
