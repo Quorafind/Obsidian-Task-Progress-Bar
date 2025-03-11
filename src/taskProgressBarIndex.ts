@@ -1,17 +1,11 @@
 import {
-	App,
-	debounce,
-	Editor,
-	editorEditorField,
 	editorInfoField,
 	HoverParent,
 	HoverPopover,
 	MarkdownRenderer,
 	Plugin,
-	PluginSettingTab,
-	Setting,
 } from "obsidian";
-import { HTMLElementWithView, taskProgressBarExtension } from "./widget";
+import { taskProgressBarExtension } from "./widget";
 import { updateProgressBarInElement } from "./readModeWidget";
 import {
 	DEFAULT_SETTINGS,
@@ -20,6 +14,7 @@ import {
 } from "./taskProgressBarSetting";
 import { EditorView } from "@codemirror/view";
 import { autoCompleteParentExtension } from "./autoCompleteParent";
+import { taskStatusSwitcherExtension } from "./task-status-switcher";
 
 class TaskProgressBarPopover extends HoverPopover {
 	plugin: TaskProgressBarPlugin;
@@ -106,8 +101,11 @@ export default class TaskProgressBarPlugin extends Plugin {
 		this.addSettingTab(new TaskProgressBarSettingTab(this.app, this));
 		this.registerEditorExtension([
 			taskProgressBarExtension(this.app, this),
-
 		]);
+		this.settings.enableTaskStatusSwitcher &&
+			this.registerEditorExtension([
+				taskStatusSwitcherExtension(this.app, this),
+			]);
 		this.registerMarkdownPostProcessor((el, ctx) => {
 			updateProgressBarInElement({
 				plugin: this,

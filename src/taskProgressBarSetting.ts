@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting, Modal } from "obsidian";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
 import { allStatusCollections } from "./task-status";
+import { STATE_MARK_MAP, TaskState } from "./task-status-switcher";
 
 export interface TaskProgressBarSettings {
 	addTaskProgressBarToHeading: boolean;
@@ -37,6 +38,11 @@ export interface TaskProgressBarSettings {
 		max: number;
 		text: string;
 	}>;
+
+	// Task status switcher settings
+	enableTaskStatusSwitcher: boolean;
+	taskStatusCycle: string[];
+	taskStatusMarks: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
@@ -76,6 +82,16 @@ export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 		{ min: 60, max: 80, text: "Good progress {{PROGRESS}}%" },
 		{ min: 80, max: 100, text: "Almost there {{PROGRESS}}%" },
 	],
+
+	// Task status switcher settings
+	enableTaskStatusSwitcher: false,
+	taskStatusCycle: ["TODO", "DOING", "IN-PROGRESS", "DONE"],
+	taskStatusMarks: {
+		TODO: " ",
+		DOING: "-",
+		"IN-PROGRESS": ">",
+		DONE: "x",
+	},
 };
 
 export class TaskProgressBarSettingTab extends PluginSettingTab {
@@ -500,6 +516,153 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 						})
 				);
 		}
+
+		this.containerEl.createEl("h2", { text: "Task Status Switcher" });
+
+		new Setting(containerEl)
+			.setName("Enable Task Status Switcher")
+			.setDesc(
+				"Enable/disable the ability to cycle through task states by clicking."
+			)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.enableTaskStatusSwitcher)
+					.onChange(async (value) => {
+						this.plugin.settings.enableTaskStatusSwitcher = value;
+						this.applySettingsUpdate();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Task Status Cycle and Marks")
+			.setDesc(
+				"Define task states and their corresponding marks. The order from top to bottom defines the cycling sequence."
+			);
+
+		// Create a container for the task states list
+		const taskStatesContainer = containerEl.createDiv({
+			cls: "task-states-container",
+		});
+
+		// Function to refresh the task states list
+		const refreshTaskStatesList = () => {
+			// Clear the container
+			taskStatesContainer.empty();
+
+			// Get current cycle and marks
+			const cycle = this.plugin.settings.taskStatusCycle;
+			const marks = this.plugin.settings.taskStatusMarks;
+
+			// Add each status in the cycle
+			cycle.forEach((state, index) => {
+				const stateRow = taskStatesContainer.createDiv({
+					cls: "task-state-row",
+				});
+
+				// Create the setting
+				const stateSetting = new Setting(stateRow)
+					.setName(`Status #${index + 1}`)
+					.addText((text) => {
+						text.setValue(state)
+							.setPlaceholder("Status name")
+							.onChange((value) => {
+								// Update the state name in both cycle and marks
+								const oldState = cycle[index];
+								cycle[index] = value;
+
+								// If the old state had a mark, preserve it with the new name
+								if (oldState in marks) {
+									marks[value] = marks[oldState];
+									delete marks[oldState];
+								}
+
+								this.applySettingsUpdate();
+							});
+					})
+					.addText((text) => {
+						text.setValue(marks[state] || " ")
+							.setPlaceholder("Mark")
+							.onChange((value) => {
+								// Only use the first character
+								const mark = value.trim().charAt(0) || " ";
+								marks[state] = mark;
+								this.applySettingsUpdate();
+							});
+						text.inputEl.maxLength = 1;
+						text.inputEl.style.width = "40px";
+					});
+
+				// Add buttons for moving up/down and removing
+				stateSetting.addExtraButton((button) => {
+					button
+						.setIcon("arrow-up")
+						.setTooltip("Move up")
+						.onClick(() => {
+							if (index > 0) {
+								// Swap with the previous item
+								[cycle[index - 1], cycle[index]] = [
+									cycle[index],
+									cycle[index - 1],
+								];
+								this.applySettingsUpdate();
+								refreshTaskStatesList();
+							}
+						});
+					button.extraSettingsEl.style.marginRight = "0";
+				});
+
+				stateSetting.addExtraButton((button) => {
+					button
+						.setIcon("arrow-down")
+						.setTooltip("Move down")
+						.onClick(() => {
+							if (index < cycle.length - 1) {
+								// Swap with the next item
+								[cycle[index], cycle[index + 1]] = [
+									cycle[index + 1],
+									cycle[index],
+								];
+								this.applySettingsUpdate();
+								refreshTaskStatesList();
+							}
+						});
+					button.extraSettingsEl.style.marginRight = "0";
+				});
+
+				stateSetting.addExtraButton((button) => {
+					button
+						.setIcon("trash")
+						.setTooltip("Remove")
+						.onClick(() => {
+							// Remove from cycle
+							cycle.splice(index, 1);
+							// Don't remove from marks to preserve settings
+							this.applySettingsUpdate();
+							refreshTaskStatesList();
+						});
+					button.extraSettingsEl.style.marginRight = "0";
+				});
+			});
+
+			// Add button to add new status
+			const addButtonContainer = taskStatesContainer.createDiv();
+			new Setting(addButtonContainer).addButton((button) => {
+				button
+					.setButtonText("Add Status")
+					.setCta()
+					.onClick(() => {
+						// Add a new status to the cycle with a default mark
+						const newStatus = `STATUS_${cycle.length + 1}`;
+						cycle.push(newStatus);
+						marks[newStatus] = " ";
+						this.applySettingsUpdate();
+						refreshTaskStatesList();
+					});
+			});
+		};
+
+		// Initial render of the task states list
+		refreshTaskStatesList();
 
 		this.containerEl.createEl("h2", { text: "Say Thank You" });
 
