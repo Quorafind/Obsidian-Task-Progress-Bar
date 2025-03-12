@@ -1,6 +1,18 @@
-# Obsidian Task Progress Bar
+# Task Genius (formerly Obsidian Task Progress Bar)
 
-A plugin for showing task progress bar near the tasks bullet or headings.
+> **Name Change Notice:** This plugin has been renamed from "Task Master" to "Task Genius" to better reflect its expanded capabilities. Originally focused on task progress bars, it now includes task status cycling, advanced task management features, and comprehensive task tracking functionality.
+
+A plugin for comprehensive task management in Obsidian, including task progress bars, task status cycling, and advanced task tracking features.
+
+## Key Features
+
+- **Task Progress Bars**: Visualize task completion with customizable progress bars
+- **Task Status Cycling**: Easily cycle through task statuses (e.g., TODO → DOING → IN-PROGRESS → DONE)
+- **Multiple Task Statuses**: Support for various task states including planned, in-progress, completed, and abandoned tasks
+- **Customizable Task Markers**: Define your own task markers and their visual representation
+- **Heading Progress Tracking**: Add progress bars to headings to track progress of all tasks under them
+- **Conditional Display**: Hide progress bars based on tags, folders, or metadata
+- **Progress Statistics**: View task completion counts and percentages
 
 ![example](./media/example.gif)
 

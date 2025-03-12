@@ -126,7 +126,12 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "📍 Task Progress Bar" });
+		new Setting(containerEl)
+			.setName("Task Genius")
+			.setDesc(
+				"Comprehensive task management plugin for Obsidian with progress bars, task status cycling, and advanced task tracking features."
+			)
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName("Show progress bar")
