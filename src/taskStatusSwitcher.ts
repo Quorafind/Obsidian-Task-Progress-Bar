@@ -9,13 +9,13 @@ import {
 	PluginValue,
 	PluginSpec,
 } from "@codemirror/view";
-import { EditorState, Prec, Range } from "@codemirror/state";
-import { App, editorInfoField, editorLivePreviewField } from "obsidian";
+import { App, editorLivePreviewField } from "obsidian";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
-import { RegExpCursor } from "./regexp-cursor";
+import { Annotation, AnnotationType } from "@codemirror/state";
 
 // 定义任务状态类型
 export type TaskState = string;
+export const taskStatusChangeAnnotation = Annotation.define();
 
 // 默认状态与mark的映射，仅在没有配置时使用
 export const STATE_MARK_MAP: Record<string, string> = {
@@ -159,10 +159,10 @@ class TaskStatusWidget extends WidgetType {
 				to: this.to,
 				insert: newText,
 			},
+			annotations: taskStatusChangeAnnotation.of("taskStatusChange"),
 		});
 	}
 }
-
 export function taskStatusSwitcherExtension(
 	app: App,
 	plugin: TaskProgressBarPlugin
@@ -182,8 +182,6 @@ export function taskStatusSwitcherExtension(
 				if (!this.shouldRender(view, from, to)) {
 					return;
 				}
-
-				console.log(from, to, match);
 
 				// 获取任务标记的位置，而不是整个匹配
 
@@ -236,7 +234,9 @@ export function taskStatusSwitcherExtension(
 		}
 
 		update(update: ViewUpdate): void {
-			this.updateDecorations(update.view, update);
+			if (update.docChanged || update.viewportChanged) {
+				this.updateDecorations(update.view, update);
+			}
 		}
 
 		destroy(): void {
@@ -244,9 +244,8 @@ export function taskStatusSwitcherExtension(
 		}
 
 		updateDecorations(view: EditorView, update?: ViewUpdate) {
-			if (!update || this.decorations.size === 0) {
+			if (!update || update.docChanged || this.decorations.size === 0) {
 				this.decorations = this.match.createDeco(view);
-				console.log(this.decorations);
 			} else {
 				this.decorations = this.match.updateDeco(
 					update,
@@ -288,7 +287,7 @@ export function taskStatusSwitcherExtension(
 					deco: Decoration
 				) => {
 					const widget = deco.spec?.widget;
-					if (widget && (widget as any).error) {
+					if ((widget as any).error) {
 						return false;
 					}
 					// Check if the range is collapsed (cursor position)
@@ -315,10 +314,8 @@ export function taskStatusSwitcherExtension(
 		},
 	};
 
-	return Prec.highest(
-		ViewPlugin.fromClass(
-			TaskStatusViewPluginValue,
-			TaskStatusViewPluginSpec
-		)
+	return ViewPlugin.fromClass(
+		TaskStatusViewPluginValue,
+		TaskStatusViewPluginSpec
 	);
 }

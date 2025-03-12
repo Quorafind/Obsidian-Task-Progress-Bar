@@ -238,7 +238,7 @@
 }
 
 .task-status-widget .list-bullet::after {
-	background-color: var(--list-marker-color);
+	background-color: var(--list-marker-color) !important;
 }
 
 /* TODO status style */

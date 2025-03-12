@@ -44,6 +44,10 @@ export interface TaskProgressBarSettings {
 	enableTaskStatusSwitcher: boolean;
 	taskStatusCycle: string[];
 	taskStatusMarks: Record<string, string>;
+
+	// Cycle complete status settings
+	enableCycleCompleteStatus: boolean;
+	alwaysCycleNewTasks: boolean;
 }
 
 export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
@@ -94,6 +98,10 @@ export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 		"IN-PROGRESS": ">",
 		DONE: "x",
 	},
+
+	// Cycle complete status settings
+	enableCycleCompleteStatus: true,
+	alwaysCycleNewTasks: false,
 };
 
 export class TaskProgressBarSettingTab extends PluginSettingTab {
@@ -543,6 +551,34 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.enableTaskStatusSwitcher)
 					.onChange(async (value) => {
 						this.plugin.settings.enableTaskStatusSwitcher = value;
+						this.applySettingsUpdate();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Enable Cycle Complete Status")
+			.setDesc(
+				"Enable/disable the ability to automatically cycle through task states when pressing a mark."
+			)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.enableCycleCompleteStatus)
+					.onChange(async (value) => {
+						this.plugin.settings.enableCycleCompleteStatus = value;
+						this.applySettingsUpdate();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Always cycle new tasks")
+			.setDesc(
+				"When enabled, newly inserted tasks will immediately cycle to the next status. When disabled, newly inserted tasks with valid marks will keep their original mark."
+			)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.alwaysCycleNewTasks)
+					.onChange(async (value) => {
+						this.plugin.settings.alwaysCycleNewTasks = value;
 						this.applySettingsUpdate();
 					});
 			});
