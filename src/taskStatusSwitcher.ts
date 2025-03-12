@@ -88,8 +88,6 @@ class TaskStatusWidget extends WidgetType {
 		const statusText = document.createElement("span");
 		statusText.classList.add(`task-state`);
 
-		console.log(this.currentState, marks);
-
 		const mark = marks[this.currentState] || " ";
 		statusText.setAttribute("data-task-state", mark);
 
@@ -197,8 +195,6 @@ class TaskStatusWidget extends WidgetType {
 		if (remainingCycle.length === 0) return;
 
 		let currentStateIndex = -1;
-
-		console.log(remainingCycle);
 
 		for (let i = 0; i < remainingCycle.length; i++) {
 			const state = remainingCycle[i];

@@ -84,9 +84,6 @@ function findTaskStatusChanges(
 			// Get the inserted text
 			const insertedText = inserted.toString();
 
-			// Debug log
-			console.log("insertedText", insertedText);
-
 			// Check if this is a new task creation with a newline
 			if (insertedText.includes("\n")) {
 				console.log(
