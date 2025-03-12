@@ -7,6 +7,7 @@ import {
 } from "@codemirror/state";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
 import { taskStatusChangeAnnotation } from "./taskStatusSwitcher";
+import { getTasksAPI } from "./utils";
 
 /**
  * Creates an editor extension that cycles through task statuses when a user clicks on a task marker
@@ -40,15 +41,34 @@ function getTaskStatusConfig(plugin: TaskProgressBarPlugin) {
  * @param tr The transaction to check
  * @returns Information about all changed task statuses or empty array if no status was changed
  */
-function findTaskStatusChanges(tr: Transaction): {
+function findTaskStatusChanges(
+	tr: Transaction,
+	tasksPluginLoaded: boolean
+): {
 	position: number;
 	currentMark: string;
 	wasCompleteTask: boolean;
+	tasksInfo: {
+		isTaskChange: boolean;
+		originalFromA: number;
+		originalToA: number;
+		originalFromB: number;
+		originalToB: number;
+		originalInsertedText: string;
+	} | null;
 }[] {
 	const taskChanges: {
 		position: number;
 		currentMark: string;
 		wasCompleteTask: boolean;
+		tasksInfo: {
+			isTaskChange: boolean;
+			originalFromA: number;
+			originalToA: number;
+			originalFromB: number;
+			originalToB: number;
+			originalInsertedText: string;
+		} | null;
 	}[] = [];
 
 	// Check each change in the transaction
@@ -64,6 +84,7 @@ function findTaskStatusChanges(tr: Transaction): {
 			const insertedText = inserted.toString();
 
 			// Debug log
+			console.log("insertedText", insertedText);
 
 			// Check if this is a new task creation with a newline
 			if (insertedText.includes("\n")) {
@@ -89,7 +110,7 @@ function findTaskStatusChanges(tr: Transaction): {
 				let currentMark: string | null = null;
 				let wasCompleteTask = false;
 				let isTaskChange = false;
-
+				let triggerByTasks = false;
 				// Case 1: Complete task inserted at once (e.g., "- [x]")
 				if (
 					insertedText
@@ -130,24 +151,37 @@ function findTaskStatusChanges(tr: Transaction): {
 					isTaskChange = true;
 				}
 
-				console.log(
-					"changedPosition",
-					changedPosition,
-					"currentMark",
-					currentMark,
-					"wasCompleteTask",
-					wasCompleteTask
-				);
-				// If we found a task change, add it to our list
+				if (
+					tasksPluginLoaded &&
+					newLineText === insertedText &&
+					(insertedText.includes("✅") ||
+						insertedText.includes("❌") ||
+						insertedText.includes("🛫") ||
+						insertedText.includes("📅"))
+				) {
+					triggerByTasks = true;
+				}
+
 				if (
 					changedPosition !== null &&
 					currentMark !== null &&
 					isTaskChange
 				) {
+					// If we found a task change, add it to our list
 					taskChanges.push({
 						position: changedPosition,
 						currentMark: currentMark,
 						wasCompleteTask: wasCompleteTask,
+						tasksInfo: triggerByTasks
+							? {
+									isTaskChange: triggerByTasks,
+									originalFromA: fromA,
+									originalToA: toA,
+									originalFromB: fromB,
+									originalToB: toB,
+									originalInsertedText: insertedText,
+							  }
+							: null,
 					});
 				}
 			}
@@ -179,8 +213,7 @@ export function handleCycleCompleteStatusTransaction(
 	}
 
 	// Check if any task statuses were changed in this transaction
-	const taskStatusChanges = findTaskStatusChanges(tr);
-
+	const taskStatusChanges = findTaskStatusChanges(tr, !!getTasksAPI(plugin));
 	if (taskStatusChanges.length === 0) {
 		return tr;
 	}
@@ -200,7 +233,8 @@ export function handleCycleCompleteStatusTransaction(
 
 	// Process each task status change
 	for (const taskStatusInfo of taskStatusChanges) {
-		const { position, currentMark, wasCompleteTask } = taskStatusInfo;
+		const { position, currentMark, wasCompleteTask, tasksInfo } =
+			taskStatusInfo;
 
 		// Find the current status in the cycle
 		let currentStatusIndex = -1;
@@ -256,12 +290,25 @@ export function handleCycleCompleteStatusTransaction(
 		// Find the exact position to place the mark
 		const markPosition = position;
 
-		// Add a change to replace the current mark with the next one
-		newChanges.push({
-			from: markPosition,
-			to: markPosition + 1,
-			insert: nextMark,
-		});
+		// If nextMark is 'x', 'X', or space and we have Tasks plugin info, use the original insertion
+		if (
+			(nextMark === "x" || nextMark === "X" || nextMark === " ") &&
+			tasksInfo !== null
+		) {
+			// Use the original insertion from Tasks plugin
+			newChanges.push({
+				from: tasksInfo.originalFromA,
+				to: tasksInfo.originalToA,
+				insert: tasksInfo.originalInsertedText,
+			});
+		} else {
+			// Add a change to replace the current mark with the next one
+			newChanges.push({
+				from: markPosition,
+				to: markPosition + 1,
+				insert: nextMark,
+			});
+		}
 	}
 
 	// If we found any changes to make, create a new transaction
