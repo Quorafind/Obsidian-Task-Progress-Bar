@@ -129,7 +129,11 @@ function findTaskStatusChanges(
 				else if (insertedText.length === 1) {
 					// Check if our insertion point is at the mark position
 					const markIndex = newLineText.indexOf("[") + 1;
-					if (pos === newLine.from + markIndex) {
+					// Don't trigger when typing the "[" character itself, only when editing the status mark within brackets
+					if (
+						pos === newLine.from + markIndex &&
+						insertedText !== "["
+					) {
 						changedPosition = pos;
 
 						currentMark = match[2];
@@ -140,7 +144,8 @@ function findTaskStatusChanges(
 				// Case 3: Multiple characters including a mark were inserted
 				else if (
 					insertedText.indexOf("[") !== -1 &&
-					insertedText.indexOf("]") !== -1
+					insertedText.indexOf("]") !== -1 &&
+					insertedText !== "[]"
 				) {
 					// Handle cases where part of a task including the mark was inserted
 					const markIndex = newLineText.indexOf("[") + 1;
