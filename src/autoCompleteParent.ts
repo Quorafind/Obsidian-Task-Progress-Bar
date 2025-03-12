@@ -10,7 +10,7 @@ import { taskStatusChangeAnnotation } from "./taskStatusSwitcher";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
 
 /**
- * Creates an editor extension that automatically completes parent tasks when all child tasks are completed
+ * Creates an editor extension that automatically updates parent tasks based on child task status changes
  * @param app The Obsidian app instance
  * @param plugin The plugin instance
  * @returns An editor extension that can be registered with the plugin
@@ -20,35 +20,35 @@ export function autoCompleteParentExtension(
 	plugin: TaskProgressBarPlugin
 ) {
 	return EditorState.transactionFilter.of((tr) => {
-		return handleAutoCompleteParentTransaction(tr, app, plugin);
+		return handleParentTaskUpdateTransaction(tr, app, plugin);
 	});
 }
 
 /**
- * Handles transactions to detect task completion and process parent task updates
+ * Handles transactions to detect task status changes and process parent task updates
  * @param tr The transaction to handle
  * @param app The Obsidian app instance
  * @param plugin The plugin instance
  * @returns The original transaction or a modified transaction
  */
-export function handleAutoCompleteParentTransaction(
+export function handleParentTaskUpdateTransaction(
 	tr: Transaction,
 	app: App,
 	plugin: TaskProgressBarPlugin
 ): TransactionSpec {
-	// Only process transactions that change the document and are user input events
+	// Only process transactions that change the document
 	if (!tr.docChanged) {
 		return tr;
 	}
 
-	// Check if a task was completed in this transaction
-	const taskCompletionInfo = findTaskCompletion(tr);
-	if (!taskCompletionInfo) {
+	// Check if a task status was changed in this transaction
+	const taskStatusChangeInfo = findTaskStatusChange(tr);
+	if (!taskStatusChangeInfo) {
 		return tr;
 	}
 
-	// Check if the completed task has a parent task
-	const { doc, lineNumber } = taskCompletionInfo;
+	// Check if the changed task has a parent task
+	const { doc, lineNumber } = taskStatusChangeInfo;
 	const parentInfo = findParentTask(doc, lineNumber);
 	if (!parentInfo) {
 		return tr;
@@ -62,30 +62,35 @@ export function handleAutoCompleteParentTransaction(
 		app
 	);
 
-	// If all siblings are completed, update the parent task
+	console.log("allSiblingsCompleted", allSiblingsCompleted);
+
+	// If all siblings are completed, mark the parent task as completed
 	if (allSiblingsCompleted) {
 		return completeParentTask(tr, parentInfo.lineNumber, doc);
 	}
 
-	// If not all siblings are completed but some are, and the feature is enabled,
-	// mark the parent as "In Progress"
-	if (plugin.settings.markParentInProgressWhenPartiallyComplete) {
-		const anySiblingsCompleted = anySiblingCompleted(
-			doc,
-			parentInfo.lineNumber,
-			parentInfo.indentationLevel,
-			app
-		);
+	// Check if any sibling is completed or has any status other than empty
+	const anySiblingsWithStatus = anySiblingWithStatus(
+		doc,
+		parentInfo.lineNumber,
+		parentInfo.indentationLevel,
+		app
+	);
 
-		if (anySiblingsCompleted) {
-			const parentStatus = getParentTaskStatus(
-				doc,
-				parentInfo.lineNumber
-			);
-			// Only update if the parent is not already marked as "In Progress"
-			if (parentStatus !== ">" && parentStatus !== "/") {
-				return markParentAsInProgress(tr, parentInfo.lineNumber, doc);
-			}
+	// If any siblings have a status and the feature is enabled, mark the parent as "In Progress"
+	if (
+		anySiblingsWithStatus &&
+		plugin.settings.markParentInProgressWhenPartiallyComplete
+	) {
+		const parentStatus = getParentTaskStatus(doc, parentInfo.lineNumber);
+		// Only update if the parent is not already marked as "In Progress" or completed
+		if (
+			parentStatus !== ">" &&
+			parentStatus !== "/" &&
+			parentStatus !== "x" &&
+			parentStatus !== "X"
+		) {
+			return markParentAsInProgress(tr, parentInfo.lineNumber, doc);
 		}
 	}
 
@@ -93,15 +98,15 @@ export function handleAutoCompleteParentTransaction(
 }
 
 /**
- * Finds a task completion event in the transaction
+ * Finds any task status change in the transaction
  * @param tr The transaction to check
- * @returns Information about the completed task or null if no task was completed
+ * @returns Information about the task with changed status or null if no task status was changed
  */
-function findTaskCompletion(tr: Transaction): {
+function findTaskStatusChange(tr: Transaction): {
 	doc: Text;
 	lineNumber: number;
 } | null {
-	let taskCompletedLine: number | null = null;
+	let taskChangedLine: number | null = null;
 
 	// Check each change in the transaction
 	tr.changes.iterChanges(
@@ -112,35 +117,47 @@ function findTaskCompletion(tr: Transaction): {
 			toB: number,
 			inserted: Text
 		) => {
-			// If a change involves inserting an 'x' character
-			const insertedText = inserted.toString();
-			if (
-				insertedText === "x" ||
-				insertedText === "X" ||
-				insertedText.trim() === "- [x]"
-			) {
-				// Get the position context
-				const pos = fromB;
-				const line = tr.newDoc.lineAt(pos);
-				const lineText = line.text;
+			// Get the position context
+			const pos = fromB;
+			const line = tr.newDoc.lineAt(pos);
+			const lineText = line.text;
 
-				// Check if this is a task being completed ([ ] to [x])
-				// Matches the pattern where the cursor is between [ and ]
-				const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[[x|X]\]/i;
-				if (taskRegex.test(lineText)) {
-					taskCompletedLine = line.number;
+			// Check if this line contains a task marker
+			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[(.)]/i;
+			const taskMatch = lineText.match(taskRegex);
+
+			if (taskMatch) {
+				// Get the old line if it exists in the old document
+				let oldLine = null;
+				try {
+					const oldPos = fromA;
+					if (oldPos >= 0 && oldPos < tr.startState.doc.length) {
+						oldLine = tr.startState.doc.lineAt(oldPos);
+					}
+				} catch (e) {
+					// Line might not exist in old document
+				}
+
+				// If we couldn't get the old line or the content has changed in the task marker area
+				if (
+					!oldLine ||
+					(inserted.length > 0 &&
+						line.from + lineText.indexOf("[") <= toB &&
+						line.from + lineText.indexOf("]") >= fromB)
+				) {
+					taskChangedLine = line.number;
 				}
 			}
 		}
 	);
 
-	if (taskCompletedLine === null) {
+	if (taskChangedLine === null) {
 		return null;
 	}
 
 	return {
 		doc: tr.newDoc,
-		lineNumber: taskCompletedLine,
+		lineNumber: taskChangedLine,
 	};
 }
 
@@ -183,11 +200,10 @@ function findParentTask(
 		// Get the indentation level of this line
 		const indentMatch = lineText.match(/^[\s|\t]*/);
 		const indentLevel = indentMatch ? indentMatch[0].length : 0;
-
 		// If this line has less indentation than the current line
 		if (indentLevel < currentIndentLevel) {
 			// Check if it's a task
-			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[([ |x|X])\]/i;
+			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[(.)\]/i;
 			if (taskRegex.test(lineText)) {
 				return {
 					lineNumber: i,
@@ -205,6 +221,7 @@ function findParentTask(
 
 	return null;
 }
+
 /**
  * Checks if all sibling tasks at the same indentation level as the parent's children are completed
  * @param doc The document to check
@@ -240,6 +257,13 @@ function areAllSiblingsCompleted(
 		const indentMatch = lineText.match(/^[\s|\t]*/);
 		const indentLevel = indentMatch ? indentMatch[0].length : 0;
 
+		console.log(
+			"indentLevel",
+			indentLevel,
+			"parentIndentLevel",
+			parentIndentLevel
+		);
+
 		// If we encounter a line with less or equal indentation to the parent,
 		// we've moved out of the parent's children scope
 		if (indentLevel <= parentIndentLevel) {
@@ -248,6 +272,12 @@ function areAllSiblingsCompleted(
 
 		// If this is a direct child of the parent (exactly one level deeper)
 		if (indentLevel === childIndentLevel) {
+			console.log(
+				"indentLevel",
+				indentLevel,
+				"childIndentLevel",
+				childIndentLevel
+			);
 			// Create a regex to match tasks based on the indentation level
 			const taskRegex = new RegExp(
 				`^[\\s|\\t]{${childIndentLevel}}([-*+]|\\d+\\.)\\s\\[(.)\\]`
@@ -257,8 +287,11 @@ function areAllSiblingsCompleted(
 			if (taskMatch) {
 				foundChild = true;
 
+				console.log("taskMatch", taskMatch);
+
 				// If we find an incomplete task, return false
 				const taskStatus = taskMatch[2];
+				console.log("taskStatus", taskStatus);
 				if (taskStatus !== "x" && taskStatus !== "X") {
 					return false;
 				}
@@ -287,18 +320,16 @@ function completeParentTask(
 
 	// Find the task marker position
 	const taskMarkerMatch = parentLineText.match(
-		/^[\s|\t]*([-*+]|\d+\.)\s\[( )\]/
+		/^[\s|\t]*([-*+]|\d+\.)\s\[(.)\]/
 	);
 	if (!taskMarkerMatch) {
 		return tr;
 	}
 
 	// Calculate the position where we need to insert 'x'
-	const markerStart =
-		parentLine.from +
-		taskMarkerMatch.index! +
-		taskMarkerMatch[0].indexOf("[ ]") +
-		1;
+	// Find the exact position of the checkbox character
+	const checkboxStart = parentLineText.indexOf("[") + 1;
+	const markerStart = parentLine.from + checkboxStart;
 
 	// Create a new transaction that adds the completion marker 'x' to the parent task
 	return {
@@ -316,14 +347,14 @@ function completeParentTask(
 }
 
 /**
- * Checks if any sibling tasks are completed
+ * Checks if any sibling tasks have any status (not empty)
  * @param doc The document to check
  * @param parentLineNumber The line number of the parent task
  * @param parentIndentLevel The indentation level of the parent task
  * @param app The Obsidian app instance
- * @returns True if any siblings are completed, false otherwise
+ * @returns True if any siblings have a status, false otherwise
  */
-function anySiblingCompleted(
+function anySiblingWithStatus(
 	doc: Text,
 	parentLineNumber: number,
 	parentIndentLevel: number,
@@ -334,13 +365,11 @@ function anySiblingCompleted(
 	// The expected indentation level for child tasks
 	const childIndentLevel = parentIndentLevel + tabSize;
 
-	// Track if we found at least one completed child
-	let foundCompletedChild = false;
-
 	// Search forward from the parent line
 	for (let i = parentLineNumber + 1; i <= doc.lines; i++) {
 		const line = doc.line(i);
 		const lineText = line.text;
+
 		// Skip empty lines
 		if (lineText.trim() === "") {
 			continue;
@@ -349,6 +378,7 @@ function anySiblingCompleted(
 		// Get the indentation of this line
 		const indentMatch = lineText.match(/^[\s|\t]*/);
 		const indentLevel = indentMatch ? indentMatch[0].length : 0;
+
 		// If we encounter a line with less or equal indentation to the parent,
 		// we've moved out of the parent's children scope
 		if (indentLevel <= parentIndentLevel) {
@@ -364,17 +394,16 @@ function anySiblingCompleted(
 
 			const taskMatch = lineText.match(taskRegex);
 			if (taskMatch) {
-				// If we find a completed task, return true
+				// If the task has any status other than space, return true
 				const taskStatus = taskMatch[2];
-				console.log("taskStatus", taskStatus);
 				if (taskStatus !== " ") {
-					foundCompletedChild = true;
+					return true;
 				}
 			}
 		}
 	}
 
-	return foundCompletedChild;
+	return false;
 }
 
 /**
