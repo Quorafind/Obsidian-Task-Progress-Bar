@@ -82,13 +82,26 @@ export function handleParentTaskUpdateTransaction(
 	) {
 		const parentStatus = getParentTaskStatus(doc, parentInfo.lineNumber);
 		// Only update if the parent is not already marked as "In Progress" or completed
+		console.log(
+			plugin.settings.taskStatuses.inProgress.trim().split("|"),
+			parentStatus
+		);
 		if (
-			parentStatus !== ">" &&
-			parentStatus !== "/" &&
+			!(
+				plugin.settings.taskStatuses.inProgress.trim().split("|") || [
+					"/",
+					">",
+				]
+			).includes(parentStatus) &&
 			parentStatus !== "x" &&
 			parentStatus !== "X"
 		) {
-			return markParentAsInProgress(tr, parentInfo.lineNumber, doc);
+			return markParentAsInProgress(
+				tr,
+				parentInfo.lineNumber,
+				doc,
+				plugin.settings.taskStatuses.inProgress.split("|") || ["/"]
+			);
 		}
 	}
 
@@ -434,7 +447,8 @@ function getParentTaskStatus(doc: Text, parentLineNumber: number): string {
 function markParentAsInProgress(
 	tr: Transaction,
 	parentLineNumber: number,
-	doc: Text
+	doc: Text,
+	taskStatusCycle: string[]
 ): TransactionSpec {
 	const parentLine = doc.line(parentLineNumber);
 	const parentLineText = parentLine.text;
@@ -461,7 +475,7 @@ function markParentAsInProgress(
 			{
 				from: markerStart,
 				to: markerStart + 1,
-				insert: ">",
+				insert: taskStatusCycle[0],
 			},
 		],
 		selection: tr.selection,
