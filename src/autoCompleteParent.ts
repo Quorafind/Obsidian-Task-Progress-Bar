@@ -43,7 +43,7 @@ export function handleParentTaskUpdateTransaction(
 
 	// Check if a task status was changed or a new task was added in this transaction
 	const taskStatusChangeInfo = findTaskStatusChange(tr);
-	console.log("Task status change info:", taskStatusChangeInfo);
+
 	if (!taskStatusChangeInfo) {
 		return tr;
 	}
@@ -51,7 +51,7 @@ export function handleParentTaskUpdateTransaction(
 	// Check if the changed task has a parent task
 	const { doc, lineNumber } = taskStatusChangeInfo;
 	const parentInfo = findParentTask(doc, lineNumber);
-	console.log("Parent task info:", parentInfo);
+
 	if (!parentInfo) {
 		return tr;
 	}
@@ -68,13 +68,8 @@ export function handleParentTaskUpdateTransaction(
 	const parentStatus = getParentTaskStatus(doc, parentInfo.lineNumber);
 	const isParentCompleted = parentStatus === "x" || parentStatus === "X";
 
-	console.log("Parent status:", parentStatus);
-	console.log("All siblings completed:", allSiblingsCompleted);
-	console.log("Is parent completed:", isParentCompleted);
-
 	// If all siblings are completed, mark the parent task as completed
 	if (allSiblingsCompleted) {
-		console.log("Marking parent as completed");
 		return completeParentTask(tr, parentInfo.lineNumber, doc);
 	}
 
@@ -86,7 +81,6 @@ export function handleParentTaskUpdateTransaction(
 		!allSiblingsCompleted &&
 		plugin.settings.markParentInProgressWhenPartiallyComplete
 	) {
-		console.log("Reverting completed parent to In Progress");
 		return markParentAsInProgress(
 			tr,
 			parentInfo.lineNumber,
@@ -102,7 +96,6 @@ export function handleParentTaskUpdateTransaction(
 		parentInfo.indentationLevel,
 		app
 	);
-	console.log("Any siblings with status:", anySiblingsWithStatus);
 
 	// If any siblings have a status and the feature is enabled, mark the parent as "In Progress"
 	if (
@@ -110,13 +103,6 @@ export function handleParentTaskUpdateTransaction(
 		plugin.settings.markParentInProgressWhenPartiallyComplete
 	) {
 		// Only update if the parent is not already marked as "In Progress" or completed
-		console.log(
-			"In Progress statuses:",
-			plugin.settings.taskStatuses.inProgress.trim().split("|"),
-			"Current parent status:",
-			parentStatus
-		);
-
 		const inProgressStatuses = plugin.settings.taskStatuses.inProgress
 			.trim()
 			.split("|") || ["/", ">"];
@@ -126,7 +112,6 @@ export function handleParentTaskUpdateTransaction(
 			parentStatus !== "x" &&
 			parentStatus !== "X"
 		) {
-			console.log("Marking parent as In Progress");
 			return markParentAsInProgress(
 				tr,
 				parentInfo.lineNumber,
@@ -178,7 +163,6 @@ function findTaskStatusChange(tr: Transaction): {
 						return; // We found a new task, no need to continue checking
 					} catch (e) {
 						// Line calculation might fail, continue with other checks
-						console.log("Error finding line for new task:", e);
 					}
 				}
 
@@ -194,7 +178,6 @@ function findTaskStatusChange(tr: Transaction): {
 						return; // We found a new task, no need to continue checking
 					} catch (e) {
 						// Line calculation might fail, continue with other checks
-						console.log("Error finding line for task at start:", e);
 					}
 				}
 			}
@@ -207,8 +190,6 @@ function findTaskStatusChange(tr: Transaction): {
 			// Check if this line contains a task marker
 			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[(.)]/i;
 			const taskMatch = lineText.match(taskRegex);
-
-			console.log(taskMatch);
 
 			if (taskMatch) {
 				// Get the old line if it exists in the old document
@@ -341,13 +322,6 @@ function areAllSiblingsCompleted(
 		const indentMatch = lineText.match(/^[\s|\t]*/);
 		const indentLevel = indentMatch ? indentMatch[0].length : 0;
 
-		console.log(
-			"indentLevel",
-			indentLevel,
-			"parentIndentLevel",
-			parentIndentLevel
-		);
-
 		// If we encounter a line with less or equal indentation to the parent,
 		// we've moved out of the parent's children scope
 		if (indentLevel <= parentIndentLevel) {
@@ -356,12 +330,6 @@ function areAllSiblingsCompleted(
 
 		// If this is a direct child of the parent (exactly one level deeper)
 		if (indentLevel === childIndentLevel) {
-			console.log(
-				"indentLevel",
-				indentLevel,
-				"childIndentLevel",
-				childIndentLevel
-			);
 			// Create a regex to match tasks based on the indentation level
 			const taskRegex = new RegExp(
 				`^[\\s|\\t]{${childIndentLevel}}([-*+]|\\d+\\.)\\s\\[(.)\\]`
