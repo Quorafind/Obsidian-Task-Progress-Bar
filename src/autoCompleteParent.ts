@@ -41,8 +41,9 @@ export function handleParentTaskUpdateTransaction(
 		return tr;
 	}
 
-	// Check if a task status was changed in this transaction
+	// Check if a task status was changed or a new task was added in this transaction
 	const taskStatusChangeInfo = findTaskStatusChange(tr);
+	console.log("Task status change info:", taskStatusChangeInfo);
 	if (!taskStatusChangeInfo) {
 		return tr;
 	}
@@ -50,6 +51,7 @@ export function handleParentTaskUpdateTransaction(
 	// Check if the changed task has a parent task
 	const { doc, lineNumber } = taskStatusChangeInfo;
 	const parentInfo = findParentTask(doc, lineNumber);
+	console.log("Parent task info:", parentInfo);
 	if (!parentInfo) {
 		return tr;
 	}
@@ -62,9 +64,35 @@ export function handleParentTaskUpdateTransaction(
 		app
 	);
 
+	// Get current parent status
+	const parentStatus = getParentTaskStatus(doc, parentInfo.lineNumber);
+	const isParentCompleted = parentStatus === "x" || parentStatus === "X";
+
+	console.log("Parent status:", parentStatus);
+	console.log("All siblings completed:", allSiblingsCompleted);
+	console.log("Is parent completed:", isParentCompleted);
+
 	// If all siblings are completed, mark the parent task as completed
 	if (allSiblingsCompleted) {
+		console.log("Marking parent as completed");
 		return completeParentTask(tr, parentInfo.lineNumber, doc);
+	}
+
+	// If the parent is already completed but not all siblings are completed,
+	// it means a new task was added after the parent was completed,
+	// so we should revert the parent to "In Progress"
+	if (
+		isParentCompleted &&
+		!allSiblingsCompleted &&
+		plugin.settings.markParentInProgressWhenPartiallyComplete
+	) {
+		console.log("Reverting completed parent to In Progress");
+		return markParentAsInProgress(
+			tr,
+			parentInfo.lineNumber,
+			doc,
+			plugin.settings.taskStatuses.inProgress.split("|") || ["/"]
+		);
 	}
 
 	// Check if any sibling is completed or has any status other than empty
@@ -74,33 +102,36 @@ export function handleParentTaskUpdateTransaction(
 		parentInfo.indentationLevel,
 		app
 	);
+	console.log("Any siblings with status:", anySiblingsWithStatus);
 
 	// If any siblings have a status and the feature is enabled, mark the parent as "In Progress"
 	if (
 		anySiblingsWithStatus &&
 		plugin.settings.markParentInProgressWhenPartiallyComplete
 	) {
-		const parentStatus = getParentTaskStatus(doc, parentInfo.lineNumber);
 		// Only update if the parent is not already marked as "In Progress" or completed
 		console.log(
+			"In Progress statuses:",
 			plugin.settings.taskStatuses.inProgress.trim().split("|"),
+			"Current parent status:",
 			parentStatus
 		);
+
+		const inProgressStatuses = plugin.settings.taskStatuses.inProgress
+			.trim()
+			.split("|") || ["/", ">"];
+
 		if (
-			!(
-				plugin.settings.taskStatuses.inProgress.trim().split("|") || [
-					"/",
-					">",
-				]
-			).includes(parentStatus) &&
+			!inProgressStatuses.includes(parentStatus) &&
 			parentStatus !== "x" &&
 			parentStatus !== "X"
 		) {
+			console.log("Marking parent as In Progress");
 			return markParentAsInProgress(
 				tr,
 				parentInfo.lineNumber,
 				doc,
-				plugin.settings.taskStatuses.inProgress.split("|") || ["/"]
+				inProgressStatuses
 			);
 		}
 	}
@@ -128,6 +159,46 @@ function findTaskStatusChange(tr: Transaction): {
 			toB: number,
 			inserted: Text
 		) => {
+			// Check if this is a new line insertion with a task marker
+			if (inserted.length > 0) {
+				const insertedText = inserted.toString();
+
+				// First check for tasks with preceding newline (common case when adding a task in the middle of a document)
+				const newTaskMatch = insertedText.match(
+					/\n[\s|\t]*([-*+]|\d+\.)\s\[ \]/
+				);
+
+				if (newTaskMatch) {
+					// A new task was added, find the line number
+					try {
+						const line = tr.newDoc.lineAt(
+							fromB + insertedText.indexOf(newTaskMatch[0]) + 1
+						);
+						taskChangedLine = line.number;
+						return; // We found a new task, no need to continue checking
+					} catch (e) {
+						// Line calculation might fail, continue with other checks
+						console.log("Error finding line for new task:", e);
+					}
+				}
+
+				// Also check for tasks without preceding newline (e.g., at the beginning of a document)
+				const taskAtStartMatch = insertedText.match(
+					/^[\s|\t]*([-*+]|\d+\.)\s\[ \]/
+				);
+
+				if (taskAtStartMatch) {
+					try {
+						const line = tr.newDoc.lineAt(fromB);
+						taskChangedLine = line.number;
+						return; // We found a new task, no need to continue checking
+					} catch (e) {
+						// Line calculation might fail, continue with other checks
+						console.log("Error finding line for task at start:", e);
+					}
+				}
+			}
+
 			// Get the position context
 			const pos = fromB;
 			const line = tr.newDoc.lineAt(pos);
@@ -136,6 +207,8 @@ function findTaskStatusChange(tr: Transaction): {
 			// Check if this line contains a task marker
 			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[(.)]/i;
 			const taskMatch = lineText.match(taskRegex);
+
+			console.log(taskMatch);
 
 			if (taskMatch) {
 				// Get the old line if it exists in the old document
@@ -453,22 +526,20 @@ function markParentAsInProgress(
 	const parentLine = doc.line(parentLineNumber);
 	const parentLineText = parentLine.text;
 
-	// Find the task marker position
+	// Find the task marker position, accepting any current status (not just empty)
 	const taskMarkerMatch = parentLineText.match(
-		/^[\s|\t]*([-*+]|\d+\.)\s\[( )\]/
+		/^[\s|\t]*([-*+]|\d+\.)\s\[(.)\]/
 	);
 	if (!taskMarkerMatch) {
 		return tr;
 	}
 
-	// Calculate the position where we need to insert '>'
-	const markerStart =
-		parentLine.from +
-		taskMarkerMatch.index! +
-		taskMarkerMatch[0].indexOf("[ ]") +
-		1;
+	// Calculate the position where we need to insert the "In Progress" marker
+	// Find the exact position of the checkbox character
+	const checkboxStart = parentLineText.indexOf("[") + 1;
+	const markerStart = parentLine.from + checkboxStart;
 
-	// Create a new transaction that adds the "In Progress" marker '>' to the parent task
+	// Create a new transaction that adds the "In Progress" marker to the parent task
 	return {
 		changes: [
 			tr.changes,
