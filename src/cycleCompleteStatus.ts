@@ -64,7 +64,6 @@ function findTaskStatusChanges(tr: Transaction): {
 			const insertedText = inserted.toString();
 
 			// Debug log
-			console.log("Inserted text:", JSON.stringify(insertedText));
 
 			// Check if this is a new task creation with a newline
 			if (insertedText.includes("\n")) {
@@ -85,10 +84,7 @@ function findTaskStatusChanges(tr: Transaction): {
 			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s+\[(.)]/;
 			const match = originalLineText.match(taskRegex);
 
-			console.log("originalLineText", originalLineText, match);
-
 			if (match) {
-				console.log("Found task match:", match);
 				let changedPosition: number | null = null;
 				let currentMark: string | null = null;
 				let wasCompleteTask = false;
@@ -103,7 +99,7 @@ function findTaskStatusChanges(tr: Transaction): {
 					// Get the mark position in the line
 					const markIndex = newLineText.indexOf("[") + 1;
 					changedPosition = newLine.from + markIndex;
-					console.log("changedPosition", changedPosition);
+
 					currentMark = match[2];
 					wasCompleteTask = true;
 					isTaskChange = true;
@@ -114,7 +110,7 @@ function findTaskStatusChanges(tr: Transaction): {
 					const markIndex = newLineText.indexOf("[") + 1;
 					if (pos === newLine.from + markIndex) {
 						changedPosition = pos;
-						console.log("changedPosition", changedPosition);
+
 						currentMark = match[2];
 						wasCompleteTask = true;
 						isTaskChange = true;
@@ -128,7 +124,7 @@ function findTaskStatusChanges(tr: Transaction): {
 					// Handle cases where part of a task including the mark was inserted
 					const markIndex = newLineText.indexOf("[") + 1;
 					changedPosition = newLine.from + markIndex;
-					console.log("changedPosition", changedPosition);
+
 					currentMark = match[2];
 					wasCompleteTask = true;
 					isTaskChange = true;
@@ -182,11 +178,9 @@ export function handleCycleCompleteStatusTransaction(
 		return tr;
 	}
 
-	console.log("tr", tr);
-
 	// Check if any task statuses were changed in this transaction
 	const taskStatusChanges = findTaskStatusChanges(tr);
-	console.log("taskStatusChanges", taskStatusChanges);
+
 	if (taskStatusChanges.length === 0) {
 		return tr;
 	}
@@ -194,17 +188,12 @@ export function handleCycleCompleteStatusTransaction(
 	// Get the task cycle and marks from plugin settings
 	const { cycle, marks } = getTaskStatusConfig(plugin);
 
-	console.log("cycle", cycle, "marks", marks);
-
 	// If no cycle is defined, don't do anything
 	if (cycle.length === 0) {
 		return tr;
 	}
 
 	// Log for debugging
-	console.log("Task status changes:", taskStatusChanges);
-	console.log("Task cycle:", cycle);
-	console.log("Task marks:", marks);
 
 	// Build a new list of changes to replace the original ones
 	const newChanges = [];
@@ -232,8 +221,6 @@ export function handleCycleCompleteStatusTransaction(
 		const nextStatusIndex = (currentStatusIndex + 1) % cycle.length;
 		const nextStatus = cycle[nextStatusIndex];
 		const nextMark = marks[nextStatus] || " ";
-
-		console.log("nextStatus", nextStatus, "nextMark", nextMark);
 
 		// Check if the current mark is the same as what would be the next mark in the cycle
 		// If they are the same, we don't need to process this further
@@ -268,8 +255,6 @@ export function handleCycleCompleteStatusTransaction(
 
 		// Find the exact position to place the mark
 		const markPosition = position;
-
-		console.log("markPosition", markPosition, "nextMark", nextMark);
 
 		// Add a change to replace the current mark with the next one
 		newChanges.push({

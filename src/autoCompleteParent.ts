@@ -7,6 +7,7 @@ import {
 } from "@codemirror/state";
 import { getTabSize } from "./utils";
 import { taskStatusChangeAnnotation } from "./taskStatusSwitcher";
+import TaskProgressBarPlugin from "./taskProgressBarIndex";
 
 /**
  * Creates an editor extension that automatically completes parent tasks when all child tasks are completed
@@ -14,9 +15,12 @@ import { taskStatusChangeAnnotation } from "./taskStatusSwitcher";
  * @param plugin The plugin instance
  * @returns An editor extension that can be registered with the plugin
  */
-export function autoCompleteParentExtension(app: App) {
+export function autoCompleteParentExtension(
+	app: App,
+	plugin: TaskProgressBarPlugin
+) {
 	return EditorState.transactionFilter.of((tr) => {
-		return handleAutoCompleteParentTransaction(tr, app);
+		return handleAutoCompleteParentTransaction(tr, app, plugin);
 	});
 }
 
@@ -29,14 +33,11 @@ export function autoCompleteParentExtension(app: App) {
  */
 export function handleAutoCompleteParentTransaction(
 	tr: Transaction,
-	app: App
+	app: App,
+	plugin: TaskProgressBarPlugin
 ): TransactionSpec {
 	// Only process transactions that change the document and are user input events
 	if (!tr.docChanged) {
-		return tr;
-	}
-
-	if (tr.annotation(taskStatusChangeAnnotation)) {
 		return tr;
 	}
 
@@ -64,6 +65,28 @@ export function handleAutoCompleteParentTransaction(
 	// If all siblings are completed, update the parent task
 	if (allSiblingsCompleted) {
 		return completeParentTask(tr, parentInfo.lineNumber, doc);
+	}
+
+	// If not all siblings are completed but some are, and the feature is enabled,
+	// mark the parent as "In Progress"
+	if (plugin.settings.markParentInProgressWhenPartiallyComplete) {
+		const anySiblingsCompleted = anySiblingCompleted(
+			doc,
+			parentInfo.lineNumber,
+			parentInfo.indentationLevel,
+			app
+		);
+
+		if (anySiblingsCompleted) {
+			const parentStatus = getParentTaskStatus(
+				doc,
+				parentInfo.lineNumber
+			);
+			// Only update if the parent is not already marked as "In Progress"
+			if (parentStatus !== ">" && parentStatus !== "/") {
+				return markParentAsInProgress(tr, parentInfo.lineNumber, doc);
+			}
+		}
 	}
 
 	return tr;
@@ -288,5 +311,135 @@ function completeParentTask(
 			},
 		],
 		selection: tr.selection,
+		annotations: [taskStatusChangeAnnotation.of("taskStatusChange")],
+	};
+}
+
+/**
+ * Checks if any sibling tasks are completed
+ * @param doc The document to check
+ * @param parentLineNumber The line number of the parent task
+ * @param parentIndentLevel The indentation level of the parent task
+ * @param app The Obsidian app instance
+ * @returns True if any siblings are completed, false otherwise
+ */
+function anySiblingCompleted(
+	doc: Text,
+	parentLineNumber: number,
+	parentIndentLevel: number,
+	app: App
+): boolean {
+	const tabSize = getTabSize(app);
+
+	// The expected indentation level for child tasks
+	const childIndentLevel = parentIndentLevel + tabSize;
+
+	// Track if we found at least one completed child
+	let foundCompletedChild = false;
+
+	// Search forward from the parent line
+	for (let i = parentLineNumber + 1; i <= doc.lines; i++) {
+		const line = doc.line(i);
+		const lineText = line.text;
+		// Skip empty lines
+		if (lineText.trim() === "") {
+			continue;
+		}
+
+		// Get the indentation of this line
+		const indentMatch = lineText.match(/^[\s|\t]*/);
+		const indentLevel = indentMatch ? indentMatch[0].length : 0;
+		// If we encounter a line with less or equal indentation to the parent,
+		// we've moved out of the parent's children scope
+		if (indentLevel <= parentIndentLevel) {
+			break;
+		}
+
+		// If this is a direct child of the parent (exactly one level deeper)
+		if (indentLevel === childIndentLevel) {
+			// Create a regex to match tasks based on the indentation level
+			const taskRegex = new RegExp(
+				`^[\\s|\\t]{${childIndentLevel}}([-*+]|\\d+\\.)\\s\\[(.)\\]`
+			);
+
+			const taskMatch = lineText.match(taskRegex);
+			if (taskMatch) {
+				// If we find a completed task, return true
+				const taskStatus = taskMatch[2];
+				console.log("taskStatus", taskStatus);
+				if (taskStatus !== " ") {
+					foundCompletedChild = true;
+				}
+			}
+		}
+	}
+
+	return foundCompletedChild;
+}
+
+/**
+ * Gets the current status of a parent task
+ * @param doc The document
+ * @param parentLineNumber The line number of the parent task
+ * @returns The task status character
+ */
+function getParentTaskStatus(doc: Text, parentLineNumber: number): string {
+	const parentLine = doc.line(parentLineNumber);
+	const parentLineText = parentLine.text;
+
+	// Find the task marker
+	const taskMarkerMatch = parentLineText.match(
+		/^[\s|\t]*([-*+]|\d+\.)\s\[(.)]/
+	);
+
+	if (!taskMarkerMatch) {
+		return "";
+	}
+
+	return taskMarkerMatch[2];
+}
+
+/**
+ * Marks a parent task as "In Progress" by modifying the transaction
+ * @param tr The transaction to modify
+ * @param parentLineNumber The line number of the parent task
+ * @param doc The document
+ * @returns The modified transaction
+ */
+function markParentAsInProgress(
+	tr: Transaction,
+	parentLineNumber: number,
+	doc: Text
+): TransactionSpec {
+	const parentLine = doc.line(parentLineNumber);
+	const parentLineText = parentLine.text;
+
+	// Find the task marker position
+	const taskMarkerMatch = parentLineText.match(
+		/^[\s|\t]*([-*+]|\d+\.)\s\[( )\]/
+	);
+	if (!taskMarkerMatch) {
+		return tr;
+	}
+
+	// Calculate the position where we need to insert '>'
+	const markerStart =
+		parentLine.from +
+		taskMarkerMatch.index! +
+		taskMarkerMatch[0].indexOf("[ ]") +
+		1;
+
+	// Create a new transaction that adds the "In Progress" marker '>' to the parent task
+	return {
+		changes: [
+			tr.changes,
+			{
+				from: markerStart,
+				to: markerStart + 1,
+				insert: ">",
+			},
+		],
+		selection: tr.selection,
+		annotations: [taskStatusChangeAnnotation.of("taskStatusChange")],
 	};
 }

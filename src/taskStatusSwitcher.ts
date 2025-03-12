@@ -275,9 +275,6 @@ export function taskStatusSwitcherExtension(
 			}
 
 			const selection = view.state.selection;
-			if (selection.ranges.length === 1 && selection.ranges[0].empty) {
-				return this.isLivePreview(view.state);
-			}
 
 			const overlap = selection.ranges.some((r) => {
 				return !(r.to <= decorationFrom || r.from >= decorationTo);
@@ -301,13 +298,6 @@ export function taskStatusSwitcherExtension(
 					}
 
 					const selection = plugin.view.state.selection;
-
-					if (
-						selection.ranges.length === 1 &&
-						selection.ranges[0].empty
-					) {
-						return true;
-					}
 
 					for (const range of selection.ranges) {
 						if (!(range.to <= rangeFrom || range.from >= rangeTo)) {
