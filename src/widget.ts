@@ -552,6 +552,7 @@ export function taskProgressBarExtension(
 							tasksNum.notStarted || 0,
 							tasksNum.planned || 0
 						),
+						side: 1,
 					});
 
 					decorations.push(startDeco.range(line.to, line.to));
