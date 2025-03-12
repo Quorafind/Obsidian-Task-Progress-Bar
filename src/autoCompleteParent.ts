@@ -6,6 +6,7 @@ import {
 	TransactionSpec,
 } from "@codemirror/state";
 import { getTabSize } from "./utils";
+import { taskStatusChangeAnnotation } from "./taskStatusSwitcher";
 
 /**
  * Creates an editor extension that automatically completes parent tasks when all child tasks are completed
@@ -32,6 +33,10 @@ export function handleAutoCompleteParentTransaction(
 ): TransactionSpec {
 	// Only process transactions that change the document and are user input events
 	if (!tr.docChanged) {
+		return tr;
+	}
+
+	if (tr.annotation(taskStatusChangeAnnotation)) {
 		return tr;
 	}
 
@@ -86,7 +91,6 @@ function findTaskCompletion(tr: Transaction): {
 		) => {
 			// If a change involves inserting an 'x' character
 			const insertedText = inserted.toString();
-			console.log(insertedText);
 			if (
 				insertedText === "x" ||
 				insertedText === "X" ||

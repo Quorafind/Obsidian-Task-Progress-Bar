@@ -15,6 +15,7 @@ import {
 import { EditorView } from "@codemirror/view";
 import { autoCompleteParentExtension } from "./autoCompleteParent";
 import { taskStatusSwitcherExtension } from "./taskStatusSwitcher";
+import { cycleCompleteStatusExtension } from "./cycleCompleteStatus";
 
 class TaskProgressBarPopover extends HoverPopover {
 	plugin: TaskProgressBarPlugin;
@@ -118,6 +119,12 @@ export default class TaskProgressBarPlugin extends Plugin {
 			if (this.settings.autoCompleteParent) {
 				this.registerEditorExtension([
 					autoCompleteParentExtension(this.app),
+				]);
+			}
+
+			if (this.settings.enableCycleCompleteStatus) {
+				this.registerEditorExtension([
+					cycleCompleteStatusExtension(this.app, this),
 				]);
 			}
 		});
