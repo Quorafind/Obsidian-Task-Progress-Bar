@@ -263,14 +263,21 @@ export function taskStatusSwitcherExtension(
 			decorationFrom: number,
 			decorationTo: number
 		) {
-			// 检查是否有选择范围与装饰范围重叠
+			console.log(
+				"decorationFrom",
+				decorationFrom,
+				"decorationTo",
+				decorationTo
+			);
 			const overlap = view.state.selection.ranges.some((r) => {
 				if (r.from <= decorationFrom) {
 					return r.to >= decorationFrom;
 				} else {
-					return r.from <= decorationTo;
+					return r.from < decorationTo;
 				}
 			});
+
+			console.log("overlap", overlap);
 
 			// 只在 LivePreview 模式下且没有选中文本时渲染
 			return !overlap && this.isLivePreview(view.state);
@@ -299,6 +306,12 @@ export function taskStatusSwitcherExtension(
 								// Determine the start and end positions of the selection range
 								const selectionStart = selectionRange.from;
 								const selectionEnd = selectionRange.to;
+								console.log(
+									"selectionStart",
+									selectionStart,
+									"selectionEnd",
+									selectionEnd
+								);
 
 								// Check if the selection range overlaps with the specified range
 								if (selectionStart <= rangeFrom) {
