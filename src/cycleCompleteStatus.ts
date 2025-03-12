@@ -82,8 +82,10 @@ function findTaskStatusChanges(tr: Transaction): {
 			const newLineText = newLine.text;
 
 			// Check if this line contains a task
-			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s\[(.)]/;
+			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s+\[(.)]/;
 			const match = originalLineText.match(taskRegex);
+
+			console.log("originalLineText", originalLineText, match);
 
 			if (match) {
 				console.log("Found task match:", match);
@@ -96,7 +98,7 @@ function findTaskStatusChanges(tr: Transaction): {
 				if (
 					insertedText
 						.trim()
-						.match(/^(?:[\s|\t]*(?:[-*+]|\d+\.)\s\[.(?:\])?)/)
+						.match(/^(?:[\s|\t]*(?:[-*+]|\d+\.)\s+\[.(?:\])?)/)
 				) {
 					// Get the mark position in the line
 					const markIndex = newLineText.indexOf("[") + 1;
@@ -132,6 +134,14 @@ function findTaskStatusChanges(tr: Transaction): {
 					isTaskChange = true;
 				}
 
+				console.log(
+					"changedPosition",
+					changedPosition,
+					"currentMark",
+					currentMark,
+					"wasCompleteTask",
+					wasCompleteTask
+				);
 				// If we found a task change, add it to our list
 				if (
 					changedPosition !== null &&
@@ -172,8 +182,11 @@ export function handleCycleCompleteStatusTransaction(
 		return tr;
 	}
 
+	console.log("tr", tr);
+
 	// Check if any task statuses were changed in this transaction
 	const taskStatusChanges = findTaskStatusChanges(tr);
+	console.log("taskStatusChanges", taskStatusChanges);
 	if (taskStatusChanges.length === 0) {
 		return tr;
 	}
@@ -181,7 +194,7 @@ export function handleCycleCompleteStatusTransaction(
 	// Get the task cycle and marks from plugin settings
 	const { cycle, marks } = getTaskStatusConfig(plugin);
 
-	console.log(cycle, marks);
+	console.log("cycle", cycle, "marks", marks);
 
 	// If no cycle is defined, don't do anything
 	if (cycle.length === 0) {
