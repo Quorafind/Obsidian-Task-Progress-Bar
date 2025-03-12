@@ -62,8 +62,6 @@ export function handleParentTaskUpdateTransaction(
 		app
 	);
 
-	console.log("allSiblingsCompleted", allSiblingsCompleted);
-
 	// If all siblings are completed, mark the parent task as completed
 	if (allSiblingsCompleted) {
 		return completeParentTask(tr, parentInfo.lineNumber, doc);
@@ -287,11 +285,9 @@ function areAllSiblingsCompleted(
 			if (taskMatch) {
 				foundChild = true;
 
-				console.log("taskMatch", taskMatch);
-
 				// If we find an incomplete task, return false
 				const taskStatus = taskMatch[2];
-				console.log("taskStatus", taskStatus);
+
 				if (taskStatus !== "x" && taskStatus !== "X") {
 					return false;
 				}
