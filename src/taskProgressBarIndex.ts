@@ -118,7 +118,7 @@ export default class TaskProgressBarPlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			if (this.settings.autoCompleteParent) {
 				this.registerEditorExtension([
-					autoCompleteParentExtension(this.app),
+					autoCompleteParentExtension(this.app, this),
 				]);
 			}
 

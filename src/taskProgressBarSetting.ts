@@ -10,6 +10,7 @@ export interface TaskProgressBarSettings {
 	addNumberToProgressBar: boolean;
 	showPercentage: boolean;
 	autoCompleteParent: boolean;
+	markParentInProgressWhenPartiallyComplete: boolean;
 	countSubLevel: boolean;
 	hideProgressBarBasedOnConditions: boolean;
 	hideProgressBarTags: string;
@@ -56,6 +57,7 @@ export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	enableHeadingProgressBar: false,
 	addNumberToProgressBar: false,
 	autoCompleteParent: false,
+	markParentInProgressWhenPartiallyComplete: false,
 	showPercentage: false,
 	countSubLevel: true,
 	hideProgressBarBasedOnConditions: false,
@@ -184,6 +186,24 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.autoCompleteParent)
 					.onChange(async (value) => {
 						this.plugin.settings.autoCompleteParent = value;
+						this.applySettingsUpdate();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Mark parent as 'In Progress' when partially complete")
+			.setDesc(
+				"When some but not all child tasks are completed, mark the parent task as 'In Progress'. Only works when 'Auto complete parent' is enabled."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings
+							.markParentInProgressWhenPartiallyComplete
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.markParentInProgressWhenPartiallyComplete =
+							value;
 						this.applySettingsUpdate();
 					})
 			);
