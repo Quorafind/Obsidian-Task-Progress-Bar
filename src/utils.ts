@@ -161,3 +161,21 @@ export function getTabSize(app: App): number {
 		return 4; // Default tab size
 	}
 }
+
+export function getTasksAPI(plugin: TaskProgressBarPlugin) {
+	// @ts-ignore
+	const tasksPlugin = plugin.app.plugins.plugins[
+		"obsidian-tasks-plugin"
+	] as any;
+
+	if (!tasksPlugin._loaded) {
+		return null;
+	}
+
+	if (!tasksPlugin) {
+		return null;
+	}
+
+	// Access the API v1 from the Tasks plugin
+	return tasksPlugin.apiV1;
+}
