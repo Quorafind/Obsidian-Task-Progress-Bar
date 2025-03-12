@@ -32,6 +32,7 @@ export function cycleCompleteStatusExtension(
 function getTaskStatusConfig(plugin: TaskProgressBarPlugin) {
 	return {
 		cycle: plugin.settings.taskStatusCycle,
+		excludeMarksFromCycle: plugin.settings.excludeMarksFromCycle || [],
 		marks: plugin.settings.taskStatusMarks,
 	};
 }
@@ -224,10 +225,13 @@ export function handleCycleCompleteStatusTransaction(
 	}
 
 	// Get the task cycle and marks from plugin settings
-	const { cycle, marks } = getTaskStatusConfig(plugin);
+	const { cycle, marks, excludeMarksFromCycle } = getTaskStatusConfig(plugin);
+	const remainingCycle = cycle.filter(
+		(state) => !excludeMarksFromCycle.includes(state)
+	);
 
 	// If no cycle is defined, don't do anything
-	if (cycle.length === 0) {
+	if (remainingCycle.length === 0) {
 		return tr;
 	}
 
@@ -243,8 +247,8 @@ export function handleCycleCompleteStatusTransaction(
 
 		// Find the current status in the cycle
 		let currentStatusIndex = -1;
-		for (let i = 0; i < cycle.length; i++) {
-			const state = cycle[i];
+		for (let i = 0; i < remainingCycle.length; i++) {
+			const state = remainingCycle[i];
 			if (marks[state] === currentMark) {
 				currentStatusIndex = i;
 				break;
@@ -257,8 +261,9 @@ export function handleCycleCompleteStatusTransaction(
 		}
 
 		// Calculate the next status
-		const nextStatusIndex = (currentStatusIndex + 1) % cycle.length;
-		const nextStatus = cycle[nextStatusIndex];
+		const nextStatusIndex =
+			(currentStatusIndex + 1) % remainingCycle.length;
+		const nextStatus = remainingCycle[nextStatusIndex];
 		const nextMark = marks[nextStatus] || " ";
 
 		// Check if the current mark is the same as what would be the next mark in the cycle

@@ -341,13 +341,6 @@ function areAllSiblingsCompleted(
 		const indentMatch = lineText.match(/^[\s|\t]*/);
 		const indentLevel = indentMatch ? indentMatch[0].length : 0;
 
-		console.log(
-			"indentLevel",
-			indentLevel,
-			"parentIndentLevel",
-			parentIndentLevel
-		);
-
 		// If we encounter a line with less or equal indentation to the parent,
 		// we've moved out of the parent's children scope
 		if (indentLevel <= parentIndentLevel) {

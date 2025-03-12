@@ -11,7 +11,7 @@ import {
 } from "@codemirror/view";
 import { App, editorLivePreviewField, Keymap, Menu } from "obsidian";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
-import { Annotation } from "@codemirror/state";
+import { Annotation, EditorSelection, SelectionRange } from "@codemirror/state";
 // @ts-ignore - This import is necessary but TypeScript can't find it
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 
@@ -52,13 +52,17 @@ class TaskStatusWidget extends WidgetType {
 	}
 
 	toDOM(): HTMLElement {
-		const { cycle, marks } = this.getStatusConfig();
+		const { cycle, marks, excludeMarksFromCycle } = this.getStatusConfig();
 		let nextState = this.currentState;
 
-		if (cycle.length > 0) {
-			const currentIndex = cycle.indexOf(this.currentState);
-			const nextIndex = (currentIndex + 1) % cycle.length;
-			nextState = cycle[nextIndex];
+		const remainingCycle = cycle.filter(
+			(state) => !excludeMarksFromCycle.includes(state)
+		);
+
+		if (remainingCycle.length > 0) {
+			const currentIndex = remainingCycle.indexOf(this.currentState);
+			const nextIndex = (currentIndex + 1) % remainingCycle.length;
+			nextState = remainingCycle[nextIndex];
 		}
 
 		const wrapper = createEl("span", {
@@ -83,6 +87,8 @@ class TaskStatusWidget extends WidgetType {
 
 		const statusText = document.createElement("span");
 		statusText.classList.add(`task-state`);
+
+		console.log(this.currentState, marks);
 
 		const mark = marks[this.currentState] || " ";
 		statusText.setAttribute("data-task-state", mark);
@@ -162,11 +168,14 @@ class TaskStatusWidget extends WidgetType {
 			return {
 				cycle: Object.keys(STATE_MARK_MAP),
 				marks: STATE_MARK_MAP,
+				excludeMarksFromCycle: [],
 			};
 		}
 
 		return {
 			cycle: this.plugin.settings.taskStatusCycle,
+			excludeMarksFromCycle:
+				this.plugin.settings.excludeMarksFromCycle || [],
 			marks: this.plugin.settings.taskStatusMarks,
 		};
 	}
@@ -179,14 +188,20 @@ class TaskStatusWidget extends WidgetType {
 		if (!currentMarkMatch) return;
 
 		const currentMark = currentMarkMatch[1];
-		const { cycle, marks } = this.getStatusConfig();
+		const { cycle, marks, excludeMarksFromCycle } = this.getStatusConfig();
 
-		if (cycle.length === 0) return;
+		const remainingCycle = cycle.filter(
+			(state) => !excludeMarksFromCycle.includes(state)
+		);
+
+		if (remainingCycle.length === 0) return;
 
 		let currentStateIndex = -1;
 
-		for (let i = 0; i < cycle.length; i++) {
-			const state = cycle[i];
+		console.log(remainingCycle);
+
+		for (let i = 0; i < remainingCycle.length; i++) {
+			const state = remainingCycle[i];
 			if (marks[state] === currentMark) {
 				currentStateIndex = i;
 				break;
@@ -198,8 +213,8 @@ class TaskStatusWidget extends WidgetType {
 		}
 
 		// Calculate next state
-		const nextStateIndex = (currentStateIndex + 1) % cycle.length;
-		const nextState = cycle[nextStateIndex];
+		const nextStateIndex = (currentStateIndex + 1) % remainingCycle.length;
+		const nextState = remainingCycle[nextStateIndex];
 		const nextMark = marks[nextState] || " ";
 
 		// Replace text
@@ -212,6 +227,7 @@ class TaskStatusWidget extends WidgetType {
 				insert: newText,
 			},
 			annotations: taskStatusChangeAnnotation.of("taskStatusChange"),
+			selection: EditorSelection.range(this.to + 1, this.to + 1),
 		});
 	}
 }
@@ -241,23 +257,17 @@ export function taskStatusSwitcherExtension(
 				const mark = match[3];
 				const cycle = plugin.settings.taskStatusCycle;
 				const marks = plugin.settings.taskStatusMarks;
+				const excludeMarksFromCycle =
+					plugin.settings.excludeMarksFromCycle || [];
+				const remainingCycle = cycle.filter(
+					(state) => !excludeMarksFromCycle.includes(state)
+				);
 
-				if (cycle.length === 0) return;
+				if (remainingCycle.length === 0) return;
 
-				let currentState: TaskState = cycle[0];
-				let found = false;
-
-				for (const state of cycle) {
-					if (marks[state] === mark) {
-						currentState = state;
-						found = true;
-						break;
-					}
-				}
-
-				if (!found && Object.values(marks).indexOf(mark) === -1) {
-					currentState = cycle[0];
-				}
+				let currentState: TaskState =
+					Object.keys(marks).find((state) => marks[state] === mark) ||
+					remainingCycle[0];
 
 				add(
 					from + match[1].length,

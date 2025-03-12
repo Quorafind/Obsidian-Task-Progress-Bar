@@ -45,6 +45,7 @@ export interface TaskProgressBarSettings {
 	enableTaskStatusSwitcher: boolean;
 	taskStatusCycle: string[];
 	taskStatusMarks: Record<string, string>;
+	excludeMarksFromCycle: string[];
 
 	// Cycle complete status settings
 	enableCycleCompleteStatus: boolean;
@@ -100,6 +101,7 @@ export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 		"IN-PROGRESS": ">",
 		DONE: "x",
 	},
+	excludeMarksFromCycle: [],
 
 	// Cycle complete status settings
 	enableCycleCompleteStatus: true,
@@ -628,6 +630,11 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 			const cycle = this.plugin.settings.taskStatusCycle;
 			const marks = this.plugin.settings.taskStatusMarks;
 
+			// Initialize excludeMarksFromCycle if it doesn't exist
+			if (!this.plugin.settings.excludeMarksFromCycle) {
+				this.plugin.settings.excludeMarksFromCycle = [];
+			}
+
 			// Add each status in the cycle
 			cycle.forEach((state, index) => {
 				const stateRow = taskStatesContainer.createDiv({
@@ -666,6 +673,38 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 						text.inputEl.maxLength = 1;
 						text.inputEl.style.width = "40px";
 					});
+
+				// Add toggle for including in cycle
+				stateSetting.addToggle((toggle) => {
+					toggle
+						.setTooltip("Include in cycle")
+						.setValue(
+							!this.plugin.settings.excludeMarksFromCycle.includes(
+								state
+							)
+						)
+						.onChange((value) => {
+							if (!value) {
+								// Add to exclude list if not already there
+								if (
+									!this.plugin.settings.excludeMarksFromCycle.includes(
+										state
+									)
+								) {
+									this.plugin.settings.excludeMarksFromCycle.push(
+										state
+									);
+								}
+							} else {
+								// Remove from exclude list
+								this.plugin.settings.excludeMarksFromCycle =
+									this.plugin.settings.excludeMarksFromCycle.filter(
+										(s) => s !== state
+									);
+							}
+							this.applySettingsUpdate();
+						});
+				});
 
 				// Add buttons for moving up/down and removing
 				stateSetting.addExtraButton((button) => {
