@@ -3,7 +3,7 @@
 	"name": "Task Genius",
 	"version": "3.3.0",
 	"minAppVersion": "0.15.2",
-	"description": "Comprehensive task management plugin for Obsidian with progress bars, task status cycling, and advanced task tracking features.",
+	"description": "Comprehensive task management that includes progress bars, task status cycling, and advanced task tracking features.",
 	"author": "Boninall",
 	"authorUrl": "https://github.com/Quorafind",
 	"isDesktopOnly": false

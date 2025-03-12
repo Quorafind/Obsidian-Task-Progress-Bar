@@ -66,6 +66,14 @@ function findTaskStatusChanges(tr: Transaction): {
 			// Debug log
 			console.log("Inserted text:", JSON.stringify(insertedText));
 
+			// Check if this is a new task creation with a newline
+			if (insertedText.includes("\n")) {
+				console.log(
+					"New task creation detected with newline, skipping"
+				);
+				return;
+			}
+
 			// Get the position context
 			const pos = fromB;
 			const originalLine = tr.startState.doc.lineAt(pos);
