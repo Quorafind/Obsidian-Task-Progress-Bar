@@ -9,9 +9,9 @@ import {
 	PluginValue,
 	PluginSpec,
 } from "@codemirror/view";
-import { App, editorLivePreviewField } from "obsidian";
+import { App, editorLivePreviewField, Keymap, Menu } from "obsidian";
 import TaskProgressBarPlugin from "./taskProgressBarIndex";
-import { Annotation, AnnotationType } from "@codemirror/state";
+import { Annotation } from "@codemirror/state";
 // @ts-ignore - This import is necessary but TypeScript can't find it
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 
@@ -26,6 +26,9 @@ export const STATE_MARK_MAP: Record<string, string> = {
 };
 
 class TaskStatusWidget extends WidgetType {
+	private cycle: string[] = [];
+	private marks: Record<string, string> = {};
+
 	constructor(
 		readonly app: App,
 		readonly plugin: TaskProgressBarPlugin,
@@ -35,6 +38,9 @@ class TaskStatusWidget extends WidgetType {
 		readonly currentState: TaskState
 	) {
 		super();
+		const config = this.getStatusConfig();
+		this.cycle = config.cycle;
+		this.marks = config.marks;
 	}
 
 	eq(other: TaskStatusWidget): boolean {
@@ -83,14 +89,72 @@ class TaskStatusWidget extends WidgetType {
 
 		statusText.textContent = this.currentState;
 
+		// Click to cycle through states
 		statusText.addEventListener("click", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			this.cycleTaskState();
+			if (Keymap.isModEvent(e)) {
+				// When modifier key is pressed, jump to the first or last state
+				const { cycle } = this.getStatusConfig();
+				if (cycle.length > 0) {
+					// Jump to the last state (DONE) if not already there
+					if (this.currentState !== cycle[cycle.length - 1]) {
+						this.setTaskState(cycle[cycle.length - 1]);
+					} else {
+						// If already at the last state, jump to the first state
+						this.setTaskState(cycle[0]);
+					}
+				}
+			} else {
+				// Normal click behavior - cycle to next state
+				this.cycleTaskState();
+			}
+		});
+
+		// Right-click to show menu with all available states
+		statusText.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			const menu = new Menu();
+
+			// Add each available state to the menu
+			for (const state of this.cycle) {
+				menu.addItem((item) => {
+					item.setTitle(state);
+					// When clicked, directly set to the selected state
+					item.onClick(() => {
+						this.setTaskState(state);
+					});
+				});
+			}
+
+			// Show the menu at the mouse position
+			menu.showAtMouseEvent(e);
 		});
 
 		wrapper.appendChild(statusText);
 		return wrapper;
+	}
+
+	private setTaskState(status: string) {
+		const currentText = this.view.state.doc.sliceString(this.from, this.to);
+		const currentMarkMatch = currentText.match(/\[(.)]/);
+
+		if (!currentMarkMatch) return;
+
+		const nextMark = this.marks[status] || " ";
+
+		// Replace text with the selected state's mark
+		const newText = currentText.replace(/\[(.)]/, `[${nextMark}]`);
+
+		this.view.dispatch({
+			changes: {
+				from: this.from,
+				to: this.to,
+				insert: newText,
+			},
+			annotations: taskStatusChangeAnnotation.of("taskStatusChange"),
+		});
 	}
 
 	private getStatusConfig() {
@@ -107,7 +171,7 @@ class TaskStatusWidget extends WidgetType {
 		};
 	}
 
-	// 循环任务状态
+	// Cycle through task states
 	cycleTaskState() {
 		const currentText = this.view.state.doc.sliceString(this.from, this.to);
 		const currentMarkMatch = currentText.match(/\[(.)]/);
@@ -133,12 +197,12 @@ class TaskStatusWidget extends WidgetType {
 			currentStateIndex = 0;
 		}
 
-		// 计算下一个状态
+		// Calculate next state
 		const nextStateIndex = (currentStateIndex + 1) % cycle.length;
 		const nextState = cycle[nextStateIndex];
 		const nextMark = marks[nextState] || " ";
 
-		// 替换文本
+		// Replace text
 		const newText = currentText.replace(/\[(.)]/, `[${nextMark}]`);
 
 		this.view.dispatch({
