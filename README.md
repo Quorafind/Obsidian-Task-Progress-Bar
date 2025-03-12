@@ -1,6 +1,6 @@
 # Task Genius (formerly Obsidian Task Progress Bar)
 
-> **Name Change Notice:** This plugin has been renamed from "Task Master" to "Task Genius" to better reflect its expanded capabilities. Originally focused on task progress bars, it now includes task status cycling, advanced task management features, and comprehensive task tracking functionality.
+> **Name Change Notice:** This plugin has been renamed from "Task Progress Bar" to "Task Genius" to better reflect its expanded capabilities. Originally focused on task progress bars, it now includes task status cycling, advanced task management features, and comprehensive task tracking functionality.
 
 A plugin for comprehensive task management in Obsidian, including task progress bars, task status cycling, and advanced task tracking features.
 
