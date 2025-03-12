@@ -55,6 +55,6 @@ esbuild
 		sourcemap: prod ? false : "inline",
 		treeShaking: true,
 		outfile: "main.js",
-		pure: ["console.log"],
+		pure: prod ? ["console.log"] : [],
 	})
 	.catch(() => process.exit(1));
