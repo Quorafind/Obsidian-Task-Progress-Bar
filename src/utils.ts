@@ -162,6 +162,23 @@ export function getTabSize(app: App): number {
 	}
 }
 
+/**
+ * Build indent string based on tab size and using tab or space
+ */
+export function buildIndentString(app: App): string {
+	try {
+		const vaultConfig = app.vault as any;
+		const useTab =
+			vaultConfig.getConfig?.("useTab") === undefined ||
+			vaultConfig.getConfig?.("useTab") === true;
+		const tabSize = getTabSize(app);
+		return useTab ? "\t" : " ".repeat(tabSize);
+	} catch (e) {
+		console.error("Error building indent string:", e);
+		return "";
+	}
+}
+
 export function getTasksAPI(plugin: TaskProgressBarPlugin) {
 	// @ts-ignore
 	const tasksPlugin = plugin.app.plugins.plugins[

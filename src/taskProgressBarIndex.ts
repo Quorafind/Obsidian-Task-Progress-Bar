@@ -20,6 +20,7 @@ import {
 	cycleTaskStatusForward,
 	cycleTaskStatusBackward,
 } from "./taskCycleCommands";
+import { moveTaskCommand } from "./taskMover";
 
 class TaskProgressBarPopover extends HoverPopover {
 	plugin: TaskProgressBarPlugin;
@@ -134,6 +135,15 @@ export default class TaskProgressBarPlugin extends Plugin {
 			name: "Cycle task status backward",
 			editorCheckCallback: (checking, editor, ctx) => {
 				return cycleTaskStatusBackward(checking, editor, ctx, this);
+			},
+		});
+
+		// Add command for moving tasks
+		this.addCommand({
+			id: "move-task-to-file",
+			name: "Move task to another file",
+			editorCheckCallback: (checking, editor, ctx) => {
+				return moveTaskCommand(checking, editor, this);
 			},
 		});
 
