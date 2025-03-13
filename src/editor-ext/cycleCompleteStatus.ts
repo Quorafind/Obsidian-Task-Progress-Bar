@@ -102,6 +102,31 @@ function findTaskStatusChanges(
 			// Check if this line contains a task
 			const taskRegex = /^[\s|\t]*([-*+]|\d+\.)\s+\[(.)]/;
 			const match = originalLineText.match(taskRegex);
+			const newMatch = newLineText.match(taskRegex);
+
+			console.log(newMatch, match, insertedText, newLineText);
+
+			// Handle pasted task content
+			if (newMatch && !match && insertedText === newLineText) {
+				const markIndex = newLineText.indexOf("[") + 1;
+				const changedPosition = newLine.from + markIndex;
+				const currentMark = newMatch[2];
+
+				taskChanges.push({
+					position: changedPosition,
+					currentMark: currentMark,
+					wasCompleteTask: true,
+					tasksInfo: {
+						isTaskChange: true,
+						originalFromA: fromA,
+						originalToA: toA,
+						originalFromB: fromB,
+						originalToB: toB,
+						originalInsertedText: insertedText,
+					},
+				});
+				return;
+			}
 
 			if (match) {
 				let changedPosition: number | null = null;
@@ -219,6 +244,15 @@ export function handleCycleCompleteStatusTransaction(
 	const taskStatusChanges = findTaskStatusChanges(tr, !!getTasksAPI(plugin));
 	if (taskStatusChanges.length === 0) {
 		return tr;
+	}
+
+	if (
+		taskStatusChanges.length === 1 &&
+		taskStatusChanges[0].tasksInfo?.isTaskChange
+	) {
+		if (tr.isUserEvent("input.paste")) {
+			return tr;
+		}
 	}
 
 	// Get the task cycle and marks from plugin settings

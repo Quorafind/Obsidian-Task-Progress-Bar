@@ -576,7 +576,6 @@ export function taskProgressBarExtension(
 					range.from,
 					range.to
 				);
-				console.log(textArray);
 				return this.calculateTasksNum(textArray, isBullet);
 			}
 
