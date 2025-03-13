@@ -243,20 +243,22 @@ class TaskProgressBarWidget extends WidgetType {
 				el.dataset.notStarted = this.notStarted.toString();
 				el.dataset.planned = this.planned.toString();
 
-				el.onmouseover = () => {
-					showPopoverWithProgressBar(this.plugin, {
-						progressBar: el,
-						data: {
-							completed: this.completed.toString(),
-							total: this.total.toString(),
-							inProgress: this.inProgress.toString(),
-							abandoned: this.abandoned.toString(),
-							notStarted: this.notStarted.toString(),
-							planned: this.planned.toString(),
-						},
-						view: this.view,
-					});
-				};
+				if (this.plugin?.settings.supportHoverToShowProgressInfo) {
+					el.onmouseover = () => {
+						showPopoverWithProgressBar(this.plugin, {
+							progressBar: el,
+							data: {
+								completed: this.completed.toString(),
+								total: this.total.toString(),
+								inProgress: this.inProgress.toString(),
+								abandoned: this.abandoned.toString(),
+								notStarted: this.notStarted.toString(),
+								planned: this.planned.toString(),
+							},
+							view: this.view,
+						});
+					};
+				}
 			}
 		);
 		this.progressBackGroundEl = this.progressBarEl.createEl("div", {
