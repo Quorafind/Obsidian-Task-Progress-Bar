@@ -43,6 +43,7 @@ export interface TaskProgressBarSettings {
 
 	// Task status switcher settings
 	enableTaskStatusSwitcher: boolean;
+	enableCustomTaskMarks: boolean;
 	taskStatusCycle: string[];
 	taskStatusMarks: Record<string, string>;
 	excludeMarksFromCycle: string[];
@@ -95,6 +96,7 @@ export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 
 	// Task status switcher settings
 	enableTaskStatusSwitcher: false,
+	enableCustomTaskMarks: false,
 	taskStatusCycle: ["TODO", "DOING", "IN-PROGRESS", "DONE"],
 	taskStatusMarks: {
 		TODO: " ",
@@ -587,7 +589,7 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 		this.containerEl.createEl("h2", { text: "Task Status Switcher" });
 
 		new Setting(containerEl)
-			.setName("Enable Task Status Switcher")
+			.setName("Enable task status switcher")
 			.setDesc(
 				"Enable/disable the ability to cycle through task states by clicking."
 			)
@@ -601,7 +603,21 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Enable Cycle Complete Status")
+			.setName("Enable custom task marks")
+			.setDesc(
+				"Replace default checkboxes with styled text marks that follow your task status cycle when clicked."
+			)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.enableCustomTaskMarks)
+					.onChange(async (value) => {
+						this.plugin.settings.enableCustomTaskMarks = value;
+						this.applySettingsUpdate();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Enable cycle complete status")
 			.setDesc(
 				"Enable/disable the ability to automatically cycle through task states when pressing a mark."
 			)

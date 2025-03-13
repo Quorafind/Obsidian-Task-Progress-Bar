@@ -7,6 +7,7 @@ import {
 } from "obsidian";
 import { taskProgressBarExtension } from "./editor-ext/widget";
 import { updateProgressBarInElement } from "./components/readModeWidget";
+import { applyTaskTextMarks } from "./components/readModeTextMark";
 import {
 	DEFAULT_SETTINGS,
 	TaskProgressBarSettings,
@@ -113,6 +114,16 @@ export default class TaskProgressBarPlugin extends Plugin {
 				taskStatusSwitcherExtension(this.app, this),
 			]);
 		this.registerMarkdownPostProcessor((el, ctx) => {
+			// Apply custom task text marks (replaces checkboxes with styled marks)
+			if (this.settings.enableTaskStatusSwitcher) {
+				applyTaskTextMarks({
+					plugin: this,
+					element: el,
+					ctx: ctx,
+				});
+			}
+
+			// Apply progress bars (existing functionality)
 			updateProgressBarInElement({
 				plugin: this,
 				element: el,

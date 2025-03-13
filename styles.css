@@ -671,3 +671,24 @@ settings:
 .task-state-row .setting-item-control button {
 	white-space: nowrap;
 }
+
+.task-state-container {
+	margin-inline-start: calc(var(--checkbox-size) * -1);
+}
+
+.task-state-container .task-state {
+	padding-inline-start: var(--size-2-1);
+	padding-inline-end: var(--size-2-1);
+
+	cursor: pointer;
+}
+
+.task-fake-bullet {
+	display: inline-block;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background-color: var(--text-normal);
+	margin-right: 4px;
+	vertical-align: middle;
+}

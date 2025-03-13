@@ -445,6 +445,8 @@ export function taskProgressBarExtension(
 						headingLine.from
 					);
 
+					console.log(range, headingLine);
+
 					if (!range) continue;
 
 					const tasksNum = this.extractTasksFromRange(
@@ -452,6 +454,8 @@ export function taskProgressBarExtension(
 						view.state,
 						false
 					);
+
+					console.log(tasksNum);
 
 					if (tasksNum.total === 0) continue;
 
@@ -572,6 +576,7 @@ export function taskProgressBarExtension(
 					range.from,
 					range.to
 				);
+				console.log(textArray);
 				return this.calculateTasksNum(textArray, isBullet);
 			}
 
@@ -1015,7 +1020,7 @@ export function taskProgressBarExtension(
 
 				// Check if the next line has the same indentation as the first line
 				// If so, return zero tasks
-				if (textArray.length > 1) {
+				if (textArray.length > 1 && bullet) {
 					const firstLineIndent =
 						textArray[0].match(/^[\s|\t]*/)?.[0] || "";
 					const secondLineIndent =

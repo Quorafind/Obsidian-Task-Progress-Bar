@@ -262,7 +262,7 @@ export function updateProgressBarInElement({
 		loadProgressbar(plugin, groupedElements, "normal");
 
 		// Add heading progress bars if enabled in settings
-		if (plugin.settings.enableHeadingProgressBar === true) {
+		if (plugin.settings.enableHeadingProgressBar) {
 			const tasksByHeading = groupTasksByHeading(element);
 			addHeadingProgressBars(plugin, tasksByHeading, "normal");
 		}
@@ -561,7 +561,13 @@ class ProgressBar extends Component {
 			// Clean up old elements
 			if (this.progressBarEl && this.progressBarEl.parentElement) {
 				const parent = this.progressBarEl.parentElement;
-				const newProgressBar = this.onload(); // Create new progress bar
+				// this.progressBarEl.remove();
+				this.progressBarEl?.detach();
+				// Unload the current component to ensure proper cleanup
+				this.onunload();
+				// Create new progress bar
+				const newProgressBar = this.onload();
+				// Remove old element after unloading
 				this.progressBarEl.remove();
 				parent.appendChild(newProgressBar);
 			}
