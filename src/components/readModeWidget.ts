@@ -1,4 +1,4 @@
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from "..";
 import {
 	Component,
 	debounce,
@@ -6,7 +6,7 @@ import {
 	MarkdownSectionInformation,
 	TFile,
 } from "obsidian";
-import { shouldHideProgressBarInPreview } from "./utils";
+import { shouldHideProgressBarInPreview } from "../utils";
 
 interface GroupElement {
 	parentElement: HTMLElement;
@@ -1185,15 +1185,21 @@ class ProgressBar extends Component {
 				// Calculate percentage of completed tasks
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				
+
 				// Use custom progress range text if enabled
 				if (this.plugin?.settings.customizeProgressRanges) {
 					const ranges = this.plugin.settings.progressRanges;
 					let rangeText = `${percentage}%`;
-					
+
 					for (const range of ranges) {
-						if (percentage >= range.min && percentage <= range.max) {
-							rangeText = range.text.replace("{{PROGRESS}}", percentage.toString());
+						if (
+							percentage >= range.min &&
+							percentage <= range.max
+						) {
+							rangeText = range.text.replace(
+								"{{PROGRESS}}",
+								percentage.toString()
+							);
 							break;
 						}
 					}
@@ -1266,15 +1272,21 @@ class ProgressBar extends Component {
 			if (this.plugin?.settings.showPercentage) {
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				
+
 				// Use custom progress range text if enabled
 				if (this.plugin?.settings.customizeProgressRanges) {
 					const ranges = this.plugin.settings.progressRanges;
 					let rangeText = `${percentage}%`;
-					
+
 					for (const range of ranges) {
-						if (percentage >= range.min && percentage <= range.max) {
-							rangeText = range.text.replace("{{PROGRESS}}", percentage.toString());
+						if (
+							percentage >= range.min &&
+							percentage <= range.max
+						) {
+							rangeText = range.text.replace(
+								"{{PROGRESS}}",
+								percentage.toString()
+							);
 							break;
 						}
 					}

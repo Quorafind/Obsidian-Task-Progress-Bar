@@ -12,10 +12,8 @@ import { EditorState, Range, Text } from "@codemirror/state";
 // @ts-ignore - This import is necessary but TypeScript can't find it
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { RegExpCursor } from "./regexp-cursor";
-import TaskProgressBarPlugin, {
-	showPopoverWithProgressBar,
-} from "./taskProgressBarIndex";
-import { shouldHideProgressBarInLivePriview } from "./utils";
+import TaskProgressBarPlugin, { showPopoverWithProgressBar } from "..";
+import { shouldHideProgressBarInLivePriview } from "../utils";
 
 interface Tasks {
 	completed: number;

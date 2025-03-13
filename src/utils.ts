@@ -1,6 +1,6 @@
 import { EditorView } from "@codemirror/view";
 
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from ".";
 import {
 	App,
 	editorInfoField,

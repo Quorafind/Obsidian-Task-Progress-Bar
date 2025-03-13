@@ -2,15 +2,14 @@ import {
 	App,
 	FuzzySuggestModal,
 	TFile,
-	TFolder,
 	Notice,
 	Editor,
 	FuzzyMatch,
 	SuggestModal,
 	MetadataCache,
 } from "obsidian";
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
-import { buildIndentString, getTabSize } from "./utils";
+import TaskProgressBarPlugin from "..";
+import { buildIndentString } from "../utils";
 
 /**
  * Modal for selecting a target file to move tasks to

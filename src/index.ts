@@ -5,22 +5,22 @@ import {
 	MarkdownRenderer,
 	Plugin,
 } from "obsidian";
-import { taskProgressBarExtension } from "./widget";
-import { updateProgressBarInElement } from "./readModeWidget";
+import { taskProgressBarExtension } from "./editor-ext/widget";
+import { updateProgressBarInElement } from "./components/readModeWidget";
 import {
 	DEFAULT_SETTINGS,
 	TaskProgressBarSettings,
 	TaskProgressBarSettingTab,
-} from "./taskProgressBarSetting";
+} from "./setting";
 import { EditorView } from "@codemirror/view";
-import { autoCompleteParentExtension } from "./autoCompleteParent";
-import { taskStatusSwitcherExtension } from "./taskStatusSwitcher";
-import { cycleCompleteStatusExtension } from "./cycleCompleteStatus";
+import { autoCompleteParentExtension } from "./editor-ext/autoCompleteParent";
+import { taskStatusSwitcherExtension } from "./editor-ext/taskStatusSwitcher";
+import { cycleCompleteStatusExtension } from "./editor-ext/cycleCompleteStatus";
 import {
 	cycleTaskStatusForward,
 	cycleTaskStatusBackward,
-} from "./taskCycleCommands";
-import { moveTaskCommand } from "./taskMover";
+} from "./commands/taskCycleCommands";
+import { moveTaskCommand } from "./commands/taskMover";
 
 class TaskProgressBarPopover extends HoverPopover {
 	plugin: TaskProgressBarPlugin;

@@ -1,7 +1,6 @@
 import { App, PluginSettingTab, Setting, Modal } from "obsidian";
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from ".";
 import { allStatusCollections } from "./task-status";
-import { STATE_MARK_MAP, TaskState } from "./taskStatusSwitcher";
 
 export interface TaskProgressBarSettings {
 	showProgressBar: boolean;

@@ -5,9 +5,9 @@ import {
 	Transaction,
 	TransactionSpec,
 } from "@codemirror/state";
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from "..";
 import { taskStatusChangeAnnotation } from "./taskStatusSwitcher";
-import { getTasksAPI } from "./utils";
+import { getTasksAPI } from "../utils";
 
 /**
  * Creates an editor extension that cycles through task statuses when a user clicks on a task marker

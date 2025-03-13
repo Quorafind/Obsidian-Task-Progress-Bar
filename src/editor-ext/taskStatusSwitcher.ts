@@ -10,7 +10,7 @@ import {
 	PluginSpec,
 } from "@codemirror/view";
 import { App, editorLivePreviewField, Keymap, Menu } from "obsidian";
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from "..";
 import { Annotation, EditorSelection, SelectionRange } from "@codemirror/state";
 // @ts-ignore - This import is necessary but TypeScript can't find it
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
