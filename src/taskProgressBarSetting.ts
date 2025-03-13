@@ -10,6 +10,7 @@ export interface TaskProgressBarSettings {
 	addNumberToProgressBar: boolean;
 	showPercentage: boolean;
 	autoCompleteParent: boolean;
+	supportHoverToShowProgressInfo: boolean;
 	markParentInProgressWhenPartiallyComplete: boolean;
 	countSubLevel: boolean;
 	hideProgressBarBasedOnConditions: boolean;
@@ -58,6 +59,7 @@ export const DEFAULT_SETTINGS: TaskProgressBarSettings = {
 	enableHeadingProgressBar: false,
 	addNumberToProgressBar: false,
 	autoCompleteParent: false,
+	supportHoverToShowProgressInfo: false,
 	markParentInProgressWhenPartiallyComplete: false,
 	showPercentage: false,
 	countSubLevel: true,
@@ -145,6 +147,23 @@ export class TaskProgressBarSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.showProgressBar)
 					.onChange(async (value) => {
 						this.plugin.settings.showProgressBar = value;
+						this.applySettingsUpdate();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Support hover to show progress info")
+			.setDesc(
+				"Toggle this to allow this plugin to show progress info when hovering over the progress bar."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.supportHoverToShowProgressInfo
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.supportHoverToShowProgressInfo =
+							value;
 						this.applySettingsUpdate();
 					})
 			);
