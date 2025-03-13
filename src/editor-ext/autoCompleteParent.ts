@@ -48,10 +48,13 @@ export function handleParentTaskUpdateTransaction(
 		return tr;
 	}
 
+	console.log(taskStatusChangeInfo);
+
 	// Check if the changed task has a parent task
 	const { doc, lineNumber } = taskStatusChangeInfo;
 	const parentInfo = findParentTask(doc, lineNumber);
 
+	console.log(parentInfo);
 	if (!parentInfo) {
 		return tr;
 	}
@@ -242,6 +245,7 @@ function findParentTask(
 	// Get the current line and its indentation level
 	const currentLine = doc.line(lineNumber);
 	const currentLineText = currentLine.text;
+	console.log(currentLineText, currentLine);
 	const currentIndentMatch = currentLineText.match(/^[\s|\t]*/);
 	const currentIndentLevel = currentIndentMatch
 		? currentIndentMatch[0].length
@@ -251,6 +255,11 @@ function findParentTask(
 	if (currentIndentLevel === 0) {
 		return null;
 	}
+
+	// Determine if the current line uses spaces or tabs for indentation
+	const usesSpaces =
+		currentIndentMatch && currentIndentMatch[0].includes(" ");
+	const usesTabs = currentIndentMatch && currentIndentMatch[0].includes("\t");
 
 	// Look backwards for a line with less indentation that contains a task
 	for (let i = lineNumber - 1; i >= 1; i--) {
@@ -265,6 +274,22 @@ function findParentTask(
 		// Get the indentation level of this line
 		const indentMatch = lineText.match(/^[\s|\t]*/);
 		const indentLevel = indentMatch ? indentMatch[0].length : 0;
+
+		// Check if the indentation type matches (spaces vs tabs)
+		const lineUsesSpaces = indentMatch && indentMatch[0].includes(" ");
+		const lineUsesTabs = indentMatch && indentMatch[0].includes("\t");
+
+		// If indentation types don't match, this can't be a parent
+		// Only compare when both lines have some indentation
+		if (indentLevel > 0 && currentIndentLevel > 0) {
+			if (
+				(usesSpaces && !lineUsesSpaces) ||
+				(usesTabs && !lineUsesTabs)
+			) {
+				continue;
+			}
+		}
+
 		// If this line has less indentation than the current line
 		if (indentLevel < currentIndentLevel) {
 			// Check if it's a task
