@@ -8,6 +8,13 @@ export interface TaskProgressBarSettings {
 	enableHeadingProgressBar: boolean;
 	addNumberToProgressBar: boolean;
 	showPercentage: boolean;
+
+	progressRanges: Array<{
+		min: number;
+		max: number;
+		text: string;
+	}>;
+
 	autoCompleteParent: boolean;
 	supportHoverToShowProgressInfo: boolean;
 	markParentInProgressWhenPartiallyComplete: boolean;
@@ -35,11 +42,6 @@ export interface TaskProgressBarSettings {
 
 	// Progress range text customization
 	customizeProgressRanges: boolean;
-	progressRanges: Array<{
-		min: number;
-		max: number;
-		text: string;
-	}>;
 
 	// Task status switcher settings
 	enableTaskStatusSwitcher: boolean;
