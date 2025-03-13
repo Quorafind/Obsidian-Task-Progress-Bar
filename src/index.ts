@@ -110,6 +110,7 @@ export default class TaskProgressBarPlugin extends Plugin {
 			taskProgressBarExtension(this.app, this),
 		]);
 		this.settings.enableTaskStatusSwitcher &&
+			this.settings.enableCustomTaskMarks &&
 			this.registerEditorExtension([
 				taskStatusSwitcherExtension(this.app, this),
 			]);

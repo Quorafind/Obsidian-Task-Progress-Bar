@@ -1,6 +1,7 @@
 import TaskProgressBarPlugin from "../index";
 import {
 	Component,
+	debounce,
 	MarkdownPostProcessorContext,
 	setIcon,
 	TFile,
@@ -55,40 +56,61 @@ class TaskTextMark extends Component {
 	}
 
 	load() {
-		this.markContainerEl = createEl("span", {
-			cls: "task-state-container",
-			attr: { "data-task-state": this.currentMark },
-		});
+		if (this.plugin.settings.enableCustomTaskMarks) {
+			// Create container for custom task mark
+			this.markContainerEl = createEl("span", {
+				cls: "task-state-container",
+				attr: { "data-task-state": this.currentMark },
+			});
 
-		this.bulletEl = this.markContainerEl.createEl("span", {
-			cls: "task-fake-bullet",
-		});
+			// Create bullet element
+			this.bulletEl = this.markContainerEl.createEl("span", {
+				cls: "task-fake-bullet",
+			});
 
-		// Create custom mark element
-		this.markEl = this.markContainerEl.createEl("span", {
-			cls: "task-state",
-			attr: { "data-task-state": this.currentMark },
-		});
+			// Create custom mark element
+			this.markEl = this.markContainerEl.createEl("span", {
+				cls: "task-state",
+				attr: { "data-task-state": this.currentMark },
+			});
 
-		this.styleMarkByStatus();
+			// Apply styling based on current status
+			this.styleMarkByStatus();
 
-		// Hide the original checkbox
+			// Insert custom mark after the checkbox
+			this.originalCheckbox.parentElement?.insertBefore(
+				this.markContainerEl,
+				this.originalCheckbox.nextSibling
+			);
+
+			// Register click handler for status cycling
+			this.registerDomEvent(this.markEl, "click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				this.debounceCycleTaskStatus();
+			});
+		} else {
+			// When custom marks are disabled, clone the checkbox for interaction
+			const newCheckbox = this.originalCheckbox.cloneNode(
+				true
+			) as HTMLInputElement;
+
+			// Insert cloned checkbox
+			this.originalCheckbox.parentElement?.insertBefore(
+				newCheckbox,
+				this.originalCheckbox.nextSibling
+			);
+
+			// Register click handler on the cloned checkbox
+			newCheckbox.addEventListener("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				this.debounceCycleTaskStatus();
+			});
+		}
+
+		// Hide the original checkbox in both cases
 		this.originalCheckbox.style.display = "none";
-
-		// Insert our mark after the checkbox
-		// Fix: Insert the mark as a sibling of the checkbox instead of trying to replace it
-		this.originalCheckbox.parentElement?.insertBefore(
-			this.markContainerEl,
-			this.originalCheckbox.nextSibling
-		);
-
-		// Add click handler to cycle through statuses
-		this.registerDomEvent(this.markEl, "click", (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			console.log("clicked");
-			this.cycleTaskStatus();
-		});
 
 		return this;
 	}
@@ -107,14 +129,25 @@ class TaskTextMark extends Component {
 		}
 	}
 
+	debounceCycleTaskStatus = debounce(() => {
+		this.cycleTaskStatus();
+	}, 200);
+
+	triggerMarkUpdate(nextMark: string) {
+		if (this.plugin.settings.enableCustomTaskMarks) {
+			this.taskItem.setAttribute("data-task", nextMark);
+			this.markEl.setAttribute("data-task-state", nextMark);
+			this.styleMarkByStatus();
+		}
+	}
+
 	cycleTaskStatus() {
 		// Get the section info to locate the task in the file
 		const sectionInfo = this.ctx.getSectionInfo(this.taskItem);
-		console.log(sectionInfo, this.taskItem);
 		if (!sectionInfo) return;
 
 		const file = this.ctx.sourcePath
-			? this.plugin.app.vault.getAbstractFileByPath(this.ctx.sourcePath)
+			? this.plugin.app.vault.getFileByPath(this.ctx.sourcePath)
 			: null;
 		if (!file || !(file instanceof TFile)) return;
 
@@ -143,8 +176,8 @@ class TaskTextMark extends Component {
 		const nextState = remainingCycle[nextIndex];
 		const nextMark = marks[nextState] || " ";
 
-		// Update the underlying file
-		this.plugin.app.vault.read(file).then((content) => {
+		// Update the underlying file using the process method for atomic operations
+		this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
 
 			// Get the relative line number from the taskItem's data-line attribute
@@ -166,20 +199,18 @@ class TaskTextMark extends Component {
 
 			if (updatedLine !== taskLine) {
 				lines[actualLineIndex] = updatedLine;
-				this.plugin.app.vault.modify(file, lines.join("\n"));
 
 				// Update the UI immediately without waiting for file change event
 				this.currentMark = nextMark;
-				this.taskItem.setAttribute("data-task", nextMark);
-				this.markEl.setAttribute("data-task-state", nextMark);
-				this.styleMarkByStatus();
-
+				this.triggerMarkUpdate(nextMark);
 				// Update the original checkbox checked state if appropriate
 				const completedMarks =
 					this.plugin.settings.taskStatuses.completed.split("|");
 				this.originalCheckbox.checked =
 					completedMarks.includes(nextMark);
 			}
+
+			return lines.join("\n");
 		});
 	}
 
