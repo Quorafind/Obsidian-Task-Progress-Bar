@@ -5,21 +5,23 @@ import {
 	MarkdownRenderer,
 	Plugin,
 } from "obsidian";
-import { taskProgressBarExtension } from "./widget";
-import { updateProgressBarInElement } from "./readModeWidget";
+import { taskProgressBarExtension } from "./editor-ext/widget";
+import { updateProgressBarInElement } from "./components/readModeWidget";
+import { applyTaskTextMarks } from "./components/readModeTextMark";
 import {
 	DEFAULT_SETTINGS,
 	TaskProgressBarSettings,
 	TaskProgressBarSettingTab,
-} from "./taskProgressBarSetting";
+} from "./setting";
 import { EditorView } from "@codemirror/view";
-import { autoCompleteParentExtension } from "./autoCompleteParent";
-import { taskStatusSwitcherExtension } from "./taskStatusSwitcher";
-import { cycleCompleteStatusExtension } from "./cycleCompleteStatus";
+import { autoCompleteParentExtension } from "./editor-ext/autoCompleteParent";
+import { taskStatusSwitcherExtension } from "./editor-ext/taskStatusSwitcher";
+import { cycleCompleteStatusExtension } from "./editor-ext/cycleCompleteStatus";
 import {
 	cycleTaskStatusForward,
 	cycleTaskStatusBackward,
-} from "./taskCycleCommands";
+} from "./commands/taskCycleCommands";
+import { moveTaskCommand } from "./commands/taskMover";
 
 class TaskProgressBarPopover extends HoverPopover {
 	plugin: TaskProgressBarPlugin;
@@ -108,10 +110,21 @@ export default class TaskProgressBarPlugin extends Plugin {
 			taskProgressBarExtension(this.app, this),
 		]);
 		this.settings.enableTaskStatusSwitcher &&
+			this.settings.enableCustomTaskMarks &&
 			this.registerEditorExtension([
 				taskStatusSwitcherExtension(this.app, this),
 			]);
 		this.registerMarkdownPostProcessor((el, ctx) => {
+			// Apply custom task text marks (replaces checkboxes with styled marks)
+			if (this.settings.enableTaskStatusSwitcher) {
+				applyTaskTextMarks({
+					plugin: this,
+					element: el,
+					ctx: ctx,
+				});
+			}
+
+			// Apply progress bars (existing functionality)
 			updateProgressBarInElement({
 				plugin: this,
 				element: el,
@@ -134,6 +147,15 @@ export default class TaskProgressBarPlugin extends Plugin {
 			name: "Cycle task status backward",
 			editorCheckCallback: (checking, editor, ctx) => {
 				return cycleTaskStatusBackward(checking, editor, ctx, this);
+			},
+		});
+
+		// Add command for moving tasks
+		this.addCommand({
+			id: "move-task-to-file",
+			name: "Move task to another file",
+			editorCheckCallback: (checking, editor, ctx) => {
+				return moveTaskCommand(checking, editor, this);
 			},
 		});
 

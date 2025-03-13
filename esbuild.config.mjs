@@ -16,7 +16,7 @@ esbuild
 			js: banner,
 		},
 		minify: prod ? true : false,
-		entryPoints: ["src/taskProgressBarIndex.ts"],
+		entryPoints: ["src/index.ts"],
 		bundle: true,
 		external: [
 			"obsidian",

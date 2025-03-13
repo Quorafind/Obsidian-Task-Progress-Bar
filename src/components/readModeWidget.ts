@@ -1,4 +1,4 @@
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from "..";
 import {
 	Component,
 	debounce,
@@ -6,7 +6,7 @@ import {
 	MarkdownSectionInformation,
 	TFile,
 } from "obsidian";
-import { shouldHideProgressBarInPreview } from "./utils";
+import { shouldHideProgressBarInPreview } from "../utils";
 
 interface GroupElement {
 	parentElement: HTMLElement;
@@ -262,7 +262,7 @@ export function updateProgressBarInElement({
 		loadProgressbar(plugin, groupedElements, "normal");
 
 		// Add heading progress bars if enabled in settings
-		if (plugin.settings.enableHeadingProgressBar === true) {
+		if (plugin.settings.enableHeadingProgressBar) {
 			const tasksByHeading = groupTasksByHeading(element);
 			addHeadingProgressBars(plugin, tasksByHeading, "normal");
 		}
@@ -561,7 +561,13 @@ class ProgressBar extends Component {
 			// Clean up old elements
 			if (this.progressBarEl && this.progressBarEl.parentElement) {
 				const parent = this.progressBarEl.parentElement;
-				const newProgressBar = this.onload(); // Create new progress bar
+				// this.progressBarEl.remove();
+				this.progressBarEl?.detach();
+				// Unload the current component to ensure proper cleanup
+				this.onunload();
+				// Create new progress bar
+				const newProgressBar = this.onload();
+				// Remove old element after unloading
 				this.progressBarEl.remove();
 				parent.appendChild(newProgressBar);
 			}
@@ -1185,15 +1191,21 @@ class ProgressBar extends Component {
 				// Calculate percentage of completed tasks
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				
+
 				// Use custom progress range text if enabled
 				if (this.plugin?.settings.customizeProgressRanges) {
 					const ranges = this.plugin.settings.progressRanges;
 					let rangeText = `${percentage}%`;
-					
+
 					for (const range of ranges) {
-						if (percentage >= range.min && percentage <= range.max) {
-							rangeText = range.text.replace("{{PROGRESS}}", percentage.toString());
+						if (
+							percentage >= range.min &&
+							percentage <= range.max
+						) {
+							rangeText = range.text.replace(
+								"{{PROGRESS}}",
+								percentage.toString()
+							);
 							break;
 						}
 					}
@@ -1266,15 +1278,21 @@ class ProgressBar extends Component {
 			if (this.plugin?.settings.showPercentage) {
 				const percentage =
 					Math.round((this.completed / this.total) * 10000) / 100;
-				
+
 				// Use custom progress range text if enabled
 				if (this.plugin?.settings.customizeProgressRanges) {
 					const ranges = this.plugin.settings.progressRanges;
 					let rangeText = `${percentage}%`;
-					
+
 					for (const range of ranges) {
-						if (percentage >= range.min && percentage <= range.max) {
-							rangeText = range.text.replace("{{PROGRESS}}", percentage.toString());
+						if (
+							percentage >= range.min &&
+							percentage <= range.max
+						) {
+							rangeText = range.text.replace(
+								"{{PROGRESS}}",
+								percentage.toString()
+							);
 							break;
 						}
 					}

@@ -1,6 +1,6 @@
 import { Editor, MarkdownFileInfo, MarkdownView } from "obsidian";
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
-import { taskStatusChangeAnnotation } from "./taskStatusSwitcher";
+import TaskProgressBarPlugin from "..";
+import { taskStatusChangeAnnotation } from "../editor-ext/taskStatusSwitcher";
 
 /**
  * Cycles the task status on the current line forward

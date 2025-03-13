@@ -5,9 +5,9 @@ import {
 	Transaction,
 	TransactionSpec,
 } from "@codemirror/state";
-import { getTabSize } from "./utils";
+import { getTabSize } from "../utils";
 import { taskStatusChangeAnnotation } from "./taskStatusSwitcher";
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from "..";
 
 /**
  * Creates an editor extension that automatically updates parent tasks based on child task status changes

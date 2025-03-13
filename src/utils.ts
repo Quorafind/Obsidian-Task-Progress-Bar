@@ -1,6 +1,6 @@
 import { EditorView } from "@codemirror/view";
 
-import TaskProgressBarPlugin from "./taskProgressBarIndex";
+import TaskProgressBarPlugin from ".";
 import {
 	App,
 	editorInfoField,
@@ -159,6 +159,23 @@ export function getTabSize(app: App): number {
 	} catch (e) {
 		console.error("Error getting tab size:", e);
 		return 4; // Default tab size
+	}
+}
+
+/**
+ * Build indent string based on tab size and using tab or space
+ */
+export function buildIndentString(app: App): string {
+	try {
+		const vaultConfig = app.vault as any;
+		const useTab =
+			vaultConfig.getConfig?.("useTab") === undefined ||
+			vaultConfig.getConfig?.("useTab") === true;
+		const tabSize = getTabSize(app);
+		return useTab ? "\t" : " ".repeat(tabSize);
+	} catch (e) {
+		console.error("Error building indent string:", e);
+		return "";
 	}
 }
 
