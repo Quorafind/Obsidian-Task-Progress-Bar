@@ -16,6 +16,10 @@ import { EditorView } from "@codemirror/view";
 import { autoCompleteParentExtension } from "./autoCompleteParent";
 import { taskStatusSwitcherExtension } from "./taskStatusSwitcher";
 import { cycleCompleteStatusExtension } from "./cycleCompleteStatus";
+import {
+	cycleTaskStatusForward,
+	cycleTaskStatusBackward,
+} from "./taskCycleCommands";
 
 class TaskProgressBarPopover extends HoverPopover {
 	plugin: TaskProgressBarPlugin;
@@ -113,6 +117,24 @@ export default class TaskProgressBarPlugin extends Plugin {
 				element: el,
 				ctx: ctx,
 			});
+		});
+
+		// Add command for cycling task status forward
+		this.addCommand({
+			id: "cycle-task-status-forward",
+			name: "Cycle task status forward",
+			editorCheckCallback: (checking, editor, ctx) => {
+				return cycleTaskStatusForward(checking, editor, ctx, this);
+			},
+		});
+
+		// Add command for cycling task status backward
+		this.addCommand({
+			id: "cycle-task-status-backward",
+			name: "Cycle task status backward",
+			editorCheckCallback: (checking, editor, ctx) => {
+				return cycleTaskStatusBackward(checking, editor, ctx, this);
+			},
 		});
 
 		this.app.workspace.onLayoutReady(() => {
