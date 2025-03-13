@@ -1013,6 +1013,26 @@ export function taskProgressBarExtension(
 					};
 				}
 
+				// Check if the next line has the same indentation as the first line
+				// If so, return zero tasks
+				if (textArray.length > 1) {
+					const firstLineIndent =
+						textArray[0].match(/^[\s|\t]*/)?.[0] || "";
+					const secondLineIndent =
+						textArray[1].match(/^[\s|\t]*/)?.[0] || "";
+
+					if (firstLineIndent === secondLineIndent) {
+						return {
+							completed: 0,
+							total: 0,
+							inProgress: 0,
+							abandoned: 0,
+							notStarted: 0,
+							planned: 0,
+						};
+					}
+				}
+
 				let completed: number = 0;
 				let inProgress: number = 0;
 				let abandoned: number = 0;

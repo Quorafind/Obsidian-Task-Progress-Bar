@@ -168,11 +168,11 @@ export function getTasksAPI(plugin: TaskProgressBarPlugin) {
 		"obsidian-tasks-plugin"
 	] as any;
 
-	if (!tasksPlugin._loaded) {
+	if (!tasksPlugin) {
 		return null;
 	}
 
-	if (!tasksPlugin) {
+	if (!tasksPlugin._loaded) {
 		return null;
 	}
 
