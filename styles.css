@@ -678,7 +678,9 @@ settings:
 
 .task-state-container .task-state {
 	padding-inline-start: var(--size-2-1);
-	padding-inline-end: var(--size-2-1);
+	padding-inline-end: var(--size-2-2);
+
+	text-decoration: none !important;
 
 	cursor: pointer;
 }
